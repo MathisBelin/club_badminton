@@ -1,0 +1,10 @@
+{
+  "_commentaire": "Copiez ce fichier en 'config.json' (même dossier que l'exe) pour pré-remplir les paramètres au tout premier lancement. C'est OPTIONNEL : ces valeurs sont aussi modifiables dans l'écran Paramètres de l'application. Ce fichier ne contient AUCUN secret. Une fois l'appli lancée une fois, les paramètres sont gérés dans %LOCALAPPDATA%\\BadmintonClub\\settings.json et ce config.json n'est plus relu.",
+
+  "GmailLabel": "Club Badminton",
+  "ClubEmail": "",
+  "GoogleSheetUrl": "",
+  "AdherentsJsonPath": "",
+  "SyncGoogleEnabled": false,
+  "BrowserPath": ""
+}

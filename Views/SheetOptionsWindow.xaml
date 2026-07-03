@@ -1,0 +1,50 @@
+<Window x:Class="BadmintonClub.Views.SheetOptionsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Options du classeur"
+        Height="330" Width="460"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" x:Name="TitleText" Style="{StaticResource FormLabel}"
+                   TextWrapping="Wrap" Margin="0,0,0,14" />
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <TextBlock Text="Partage par lien" Style="{StaticResource FormLabel}" />
+            <CheckBox x:Name="LinkAccessCheck" Margin="0,2,0,6"
+                      Content="Accessible à toute personne disposant du lien" />
+            <StackPanel Orientation="Horizontal"
+                        IsEnabled="{Binding IsChecked, ElementName=LinkAccessCheck}">
+                <TextBlock Text="Les personnes avec le lien sont :" VerticalAlignment="Center"
+                           Margin="0,0,8,0" Foreground="#555555" />
+                <ComboBox x:Name="RoleCombo" Width="160">
+                    <ComboBoxItem Tag="reader">Lecteur</ComboBoxItem>
+                    <ComboBoxItem Tag="commenter">Commentateur</ComboBoxItem>
+                    <ComboBoxItem Tag="writer">Éditeur</ComboBoxItem>
+                </ComboBox>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,4,0,0">
+            <Button Content="💾 Appliquer le partage" Style="{StaticResource PrimaryButton}"
+                    Click="Appliquer_Click" />
+            <Button Content="⬇ Télécharger en CSV" Click="Telecharger_Click" />
+            <Button Content="🔗 Ouvrir" Click="Ouvrir_Click" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="3" x:Name="LoadingText" Text="Chargement…" Foreground="#999999"
+                   VerticalAlignment="Top" Margin="0,10,0,0" />
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Fermer" IsCancel="True" Click="Fermer_Click" Margin="0" />
+        </StackPanel>
+    </Grid>
+</Window>

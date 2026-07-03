@@ -1,0 +1,65 @@
+<Window x:Class="BadmintonClub.Views.CreateSheetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Créer un Google Sheet"
+        Height="480" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="Nom du classeur" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="SheetNameBox" />
+        </StackPanel>
+
+        <!-- Partage -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,14">
+            <TextBlock Text="Partage" Style="{StaticResource FormLabel}" />
+            <CheckBox x:Name="LinkAccessCheck" IsChecked="True" Margin="0,2,0,6"
+                      Content="Accessible à toute personne disposant du lien" />
+            <StackPanel Orientation="Horizontal"
+                        IsEnabled="{Binding IsChecked, ElementName=LinkAccessCheck}">
+                <TextBlock Text="Les personnes avec le lien sont :" VerticalAlignment="Center"
+                           Margin="0,0,8,0" Foreground="#555555" />
+                <ComboBox x:Name="RoleCombo" Width="160" SelectedIndex="2">
+                    <ComboBoxItem Tag="reader">Lecteur</ComboBoxItem>
+                    <ComboBoxItem Tag="commenter">Commentateur</ComboBoxItem>
+                    <ComboBoxItem Tag="writer">Éditeur</ComboBoxItem>
+                </ComboBox>
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock Grid.Row="2" Text="Modèle (optionnel) : glissez un Excel/CSV pour pré-remplir le classeur"
+                   Style="{StaticResource FormLabel}" />
+
+        <!-- Zone modèle CSV -->
+        <Border Grid.Row="3" AllowDrop="True" DragOver="Drop_DragOver" Drop="Drop_Drop"
+                MouseLeftButtonUp="Drop_Click" Cursor="Hand" Margin="0,4,0,0">
+            <Grid>
+                <Rectangle Stroke="#9CB89C" StrokeDashArray="4 3" StrokeThickness="2"
+                           RadiusX="10" RadiusY="10" Fill="#F7FAF7" />
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="📄" FontSize="30" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="TemplateHint" HorizontalAlignment="Center" Margin="0,8,0,0"
+                               Foreground="#555555" TextAlignment="Center"
+                               Text="Aucun modèle — classeur vierge.&#x0a;Glissez un Excel/CSV ici ou cliquez pour parcourir." />
+                    <Button x:Name="ClearTemplateButton" Content="Retirer le modèle" Margin="0,8,0,0"
+                            HorizontalAlignment="Center" Visibility="Collapsed" Click="ClearTemplate_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Annuler" IsCancel="True" Click="Annuler_Click" />
+            <Button Content="✅ Créer" Style="{StaticResource PrimaryButton}"
+                    Click="Creer_Click" Margin="0" />
+        </StackPanel>
+    </Grid>
+</Window>

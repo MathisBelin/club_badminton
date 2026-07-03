@@ -1,0 +1,52 @@
+<Window x:Class="BadmintonClub.Views.AdherentEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="clr-namespace:BadmintonClub.Controls"
+        Title="Adhérent"
+        Height="400" Width="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="Prénom *" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="PrenomBox" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <TextBlock Text="Nom *" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="NomBox" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Margin="0,0,0,10">
+            <TextBlock Text="Téléphone" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="TelephoneBox" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Margin="0,0,0,10">
+            <TextBlock Text="E-mail" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="EmailBox" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" x:Name="LabelsSection" Margin="0,0,0,10" Visibility="Collapsed">
+            <TextBlock Text="Associer à des libellés (optionnel)" Style="{StaticResource FormLabel}" />
+            <ctrl:MultiSelectComboBox x:Name="LabelsSelect" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Annuler" IsCancel="True" Click="Annuler_Click" />
+            <Button Content="Enregistrer" Style="{StaticResource PrimaryButton}"
+                    IsDefault="True" Click="Enregistrer_Click" Margin="0" />
+        </StackPanel>
+    </Grid>
+</Window>

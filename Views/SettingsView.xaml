@@ -1,0 +1,51 @@
+<UserControl x:Class="BadmintonClub.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel Margin="24">
+        <TextBlock DockPanel.Dock="Top" Text="Paramètres" Style="{StaticResource PageTitle}"
+                   Margin="0,0,0,16" />
+
+        <Border DockPanel.Dock="Bottom" Padding="0,14,0,0">
+            <Button Content="💾 Enregistrer les paramètres" Style="{StaticResource PrimaryButton}"
+                    HorizontalAlignment="Left" Click="Enregistrer_Click" />
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+
+                <TextBlock Text="Nom de l'étiquette Gmail (groupe de contacts) cible"
+                           Style="{StaticResource FormLabel}" />
+                <TextBox x:Name="LabelBox" />
+                <TextBlock Text="Utilisé pour la synchronisation automatique des adhérents."
+                           Foreground="#888888" FontSize="11" Margin="0,3,0,14" TextWrapping="Wrap" />
+
+                <TextBlock Text="Adresse e-mail du club" Style="{StaticResource FormLabel}" />
+                <TextBox x:Name="ClubEmailBox" />
+                <TextBlock Text="Les Google Sheets créés seront aussi partagés (en éditeur) avec cette adresse."
+                           Foreground="#888888" FontSize="11" Margin="0,3,0,14" TextWrapping="Wrap" />
+
+                <TextBlock Text="URL du Google Sheet des événements" Style="{StaticResource FormLabel}" />
+                <TextBox x:Name="SheetUrlBox" Margin="0,0,0,14" />
+
+                <TextBlock Text="Chemin du fichier JSON des adhérents (optionnel)"
+                           Style="{StaticResource FormLabel}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="JsonPathBox" Grid.Column="0" />
+                    <Button Grid.Column="1" Content="Parcourir…" Margin="8,0,0,0" Click="Parcourir_Click" />
+                </Grid>
+                <TextBlock x:Name="DefaultPathHint" Foreground="#888888" FontSize="11"
+                           Margin="0,3,0,14" TextWrapping="Wrap" />
+
+                <TextBlock Text="Navigateur pour ouvrir les liens" Style="{StaticResource FormLabel}" />
+                <ComboBox x:Name="BrowserCombo" DisplayMemberPath="Name" Padding="6,4" Margin="0,0,0,14" />
+
+                <CheckBox x:Name="SyncCheck" Margin="0,4,0,0"
+                          Content="Synchroniser automatiquement avec Google Contacts (ajout / suppression)" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

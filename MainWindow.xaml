@@ -1,0 +1,88 @@
+<Window x:Class="BadmintonClub.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Club de Badminton"
+        Height="640" Width="1000"
+        WindowStartupLocation="CenterScreen"
+        MinHeight="480" MinWidth="820">
+    <Grid>
+
+        <!-- ============ Application (visible une fois connecté) ============ -->
+        <Grid x:Name="AppRoot" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="230" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Menu latéral fixe -->
+            <Border Grid.Column="0" Background="#1B5E20">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="22,24,22,28">
+                        <TextBlock Text="🏸" FontSize="30" />
+                        <TextBlock Text="Club Badminton" Foreground="White" FontSize="18"
+                                   FontWeight="Bold" Margin="0,4,0,0" />
+                        <TextBlock Text="Gestion du club" Foreground="#A5D6A7" FontSize="12" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="NavPanel" DockPanel.Dock="Top">
+                        <RadioButton x:Name="NavContacts" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="contacts" Content="👥   Contacts"
+                                     Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavLabels" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="labels" Content="🏷   Libellés Gmail"
+                                     Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavSheets" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="sheets" Content="📄   Google Sheets"
+                                     Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavSettings" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="settings" Content="⚙   Paramètres"
+                                     Checked="Nav_Checked" />
+                    </StackPanel>
+
+                    <Border DockPanel.Dock="Bottom" Margin="14,0,14,14" Background="#124C1B"
+                            CornerRadius="8" Padding="12" VerticalAlignment="Bottom">
+                        <StackPanel>
+                            <TextBlock Text="👤 Compte Google" Foreground="#A5D6A7" FontSize="10" />
+                            <TextBlock x:Name="AccountEmailText" Text="Non connecté" Foreground="White"
+                                       FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,3,0,8" />
+                            <Button x:Name="LogoutButton" Content="🔓 Se déconnecter"
+                                    Click="Deconnexion_Click" Margin="0" HorizontalAlignment="Stretch"
+                                    Padding="8,6" ToolTip="Se déconnecter (pour changer de compte)" />
+                        </StackPanel>
+                    </Border>
+                </DockPanel>
+            </Border>
+
+            <!-- Zone de contenu -->
+            <Border Grid.Column="1" Background="#F4F6F4">
+                <ContentControl x:Name="ContentHost" />
+            </Border>
+        </Grid>
+
+        <!-- ============ Écran de connexion ============ -->
+        <Grid x:Name="LoginRoot" Background="#1B5E20">
+            <Border Background="White" CornerRadius="12" Padding="40,36" Width="420"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border.Effect>
+                    <DropShadowEffect Color="#55000000" BlurRadius="24" ShadowDepth="4" />
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock Text="🏸" FontSize="46" HorizontalAlignment="Center" />
+                    <TextBlock Text="Club de Badminton" FontSize="22" FontWeight="Bold"
+                               Foreground="#233323" HorizontalAlignment="Center" Margin="0,8,0,2" />
+                    <TextBlock Text="Connectez-vous avec votre compte Google pour accéder à la gestion du club."
+                               Foreground="#777777" TextWrapping="Wrap" TextAlignment="Center"
+                               Margin="0,0,0,24" />
+                    <Button x:Name="ConnexionButton" Content="Se connecter avec Google"
+                            Style="{StaticResource PrimaryButton}" Padding="16,10"
+                            HorizontalAlignment="Center" Click="Connexion_Click" />
+                    <Button x:Name="CancelLoginButton" Content="Annuler la connexion"
+                            Padding="14,8" HorizontalAlignment="Center" Margin="0,10,0,0"
+                            Visibility="Collapsed" Click="AnnulerConnexion_Click" />
+                    <TextBlock x:Name="LoginStatus" Foreground="#B71C1C" TextWrapping="Wrap"
+                               TextAlignment="Center" Margin="0,16,0,0" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

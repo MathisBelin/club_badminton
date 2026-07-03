@@ -1,0 +1,15 @@
+## Build
+bin/
+obj/
+
+## Secrets / données locales — NE PAS committer
+client_secret.json
+config.json
+*.user
+
+## IDE
+.vs/
+.idea/
+
+## Claude Code (config locale)
+.claude/settings.local.json

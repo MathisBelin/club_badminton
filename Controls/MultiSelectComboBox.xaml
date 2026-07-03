@@ -1,0 +1,49 @@
+<UserControl x:Class="BadmintonClub.Controls.MultiSelectComboBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <ToggleButton x:Name="Toggle" Height="30" HorizontalContentAlignment="Stretch"
+                      Padding="8,0" Background="White" BorderBrush="#CCCCCC" BorderThickness="1"
+                      Cursor="Hand">
+            <DockPanel LastChildFill="True">
+                <TextBlock DockPanel.Dock="Right" Text="▾" VerticalAlignment="Center"
+                           Margin="6,0,2,0" Foreground="#888888" />
+                <TextBlock x:Name="ToggleText" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" Foreground="#333333" />
+            </DockPanel>
+        </ToggleButton>
+
+        <Popup x:Name="Popup" StaysOpen="False" Placement="Bottom"
+               PlacementTarget="{Binding ElementName=Toggle}"
+               Width="{Binding ActualWidth, ElementName=Toggle}"
+               IsOpen="{Binding IsChecked, ElementName=Toggle, Mode=TwoWay}"
+               AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="White" BorderBrush="#CCCCCC" BorderThickness="1"
+                    CornerRadius="4" Margin="0,2,0,0">
+                <Border.Effect>
+                    <DropShadowEffect Color="#40000000" BlurRadius="10" ShadowDepth="2" />
+                </Border.Effect>
+                <DockPanel Margin="7">
+                    <TextBox x:Name="SearchBox" DockPanel.Dock="Top"
+                             Style="{StaticResource RoundedSearchBox}"
+                             TextChanged="SearchBox_TextChanged" />
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,6,0,5">
+                        <Button Content="Tout" Padding="7,2" MinWidth="0" Click="SelectAll_Click" />
+                        <Button Content="Aucun" Padding="7,2" MinWidth="0" Click="SelectNone_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="EmptyText" DockPanel.Dock="Top" Foreground="#999999"
+                               FontSize="12" Margin="2,4" Visibility="Collapsed" />
+                    <ListBox x:Name="OptionsList" MaxHeight="170" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Content="{Binding Text}" Margin="2,1" FontSize="13" />
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

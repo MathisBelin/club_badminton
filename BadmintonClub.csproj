@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>BadmintonClub</RootNamespace>
+    <AssemblyName>BadmintonClub</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Versions flottantes : NuGet prendra la dernière 1.x compatible.
+         Remplacez par une version fixe si vous voulez verrouiller le build. -->
+    <PackageReference Include="Google.Apis.Auth" Version="1.*" />
+    <PackageReference Include="Google.Apis.PeopleService.v1" Version="1.*" />
+    <PackageReference Include="Google.Apis.Sheets.v4" Version="1.*" />
+    <PackageReference Include="Google.Apis.Drive.v3" Version="1.*" />
+    <PackageReference Include="ClosedXML" Version="0.104.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copiés à côté de l'exe s'ils existent (ne font pas échouer le build s'ils sont absents). -->
+    <None Update="client_secret.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('client_secret.json')" />
+    <None Update="config.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('config.json')" />
+  </ItemGroup>
+
+</Project>

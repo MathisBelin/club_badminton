@@ -70,6 +70,35 @@ Au premier ajout d'adhérent, une fenêtre du navigateur s'ouvre pour autoriser 
 }
 ```
 
+## Installer sur le PC (exe autonome + raccourcis)
+
+L'application peut s'installer comme une vraie appli Windows (icône + nom, épinglable
+à la barre des tâches / menu Démarrer).
+
+### 1. Publier l'exe autonome (sans besoin de .NET sur le PC cible)
+```sh
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+```
+Produit `bin\Release\net8.0-windows\win-x64\publish\BadmintonClub.exe`.
+
+### 2a. Installation rapide, sans droits admin (raccourcis Menu Démarrer + Bureau)
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+# désinstallation :
+powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
+```
+
+### 2b. Créer un vrai installeur `setup.exe` (Inno Setup)
+Installer [Inno Setup 6](https://jrsoftware.org/isdl.php) puis :
+```sh
+ISCC.exe installer\ClubBadminton.iss
+```
+Génère `dist\ClubBadminton-Setup-<version>.exe`.
+
+> ⚠️ Si `client_secret.json` est présent à côté de l'exe publié, il est **inclus** dans
+> l'installeur (pratique pour un usage perso). Dans ce cas, **ne partagez pas** le
+> `setup.exe` publiquement (il contient vos identifiants).
+
 ## Notes
 
 - Les versions des paquets Google utilisent une version flottante `1.*` (dernière 1.x). Pour verrouiller un build reproductible, fixez une version précise dans `BadmintonClub.csproj`.

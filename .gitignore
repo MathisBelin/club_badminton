@@ -1,6 +1,7 @@
 ## Build
 bin/
 obj/
+dist/
 
 ## Secrets / données locales — NE PAS committer
 client_secret.json

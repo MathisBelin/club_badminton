@@ -10,7 +10,16 @@
     <AssemblyName>BadmintonClub</AssemblyName>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\app.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>Club de Badminton</Product>
+    <AssemblyTitle>Club de Badminton</AssemblyTitle>
+    <Company>Club de Badminton</Company>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="assets\app.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Versions flottantes : NuGet prendra la dernière 1.x compatible.

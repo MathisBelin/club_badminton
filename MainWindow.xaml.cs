@@ -27,7 +27,27 @@ public partial class MainWindow : Window
         // Sélection initiale : Contacts (le contenu est prêt derrière l'écran de connexion).
         NavContacts.IsChecked = true;
 
+        var version = $"v{Services.UpdateService.CurrentVersion}";
+        VersionText.Text = version;
+        LoginVersionText.Text = $"Club de Badminton — {version}";
+
         Loaded += async (_, _) => await StartupAsync();
+    }
+
+    private async Task CheckForUpdateAsync()
+    {
+        var info = await Services.UpdateService.CheckAsync();
+        if (info == null)
+            return;
+
+        var choix = MessageBox.Show(this,
+            $"Une nouvelle version ({info.Version}) est disponible.\n" +
+            $"Vous utilisez la v{Services.UpdateService.CurrentVersion}.\n\n" +
+            "Télécharger la mise à jour ?",
+            "Mise à jour disponible", MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+        if (choix == MessageBoxResult.Yes)
+            Services.BrowserService.Open(info.Url);
     }
 
     // ---- Connexion / déconnexion -----------------------------------------
@@ -115,6 +135,7 @@ public partial class MainWindow : Window
         LoginRoot.Visibility = Visibility.Collapsed;
         AppRoot.Visibility = Visibility.Visible;
         await SyncAllAsync();
+        _ = CheckForUpdateAsync(); // en arrière-plan, non bloquant
     }
 
     private async Task SyncAllAsync()

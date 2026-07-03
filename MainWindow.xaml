@@ -40,17 +40,20 @@
                                      Checked="Nav_Checked" />
                     </StackPanel>
 
-                    <Border DockPanel.Dock="Bottom" Margin="14,0,14,14" Background="#124C1B"
-                            CornerRadius="8" Padding="12" VerticalAlignment="Bottom">
-                        <StackPanel>
-                            <TextBlock Text="👤 Compte Google" Foreground="#A5D6A7" FontSize="10" />
-                            <TextBlock x:Name="AccountEmailText" Text="Non connecté" Foreground="White"
-                                       FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,3,0,8" />
-                            <Button x:Name="LogoutButton" Content="🔓 Se déconnecter"
-                                    Click="Deconnexion_Click" Margin="0" HorizontalAlignment="Stretch"
-                                    Padding="8,6" ToolTip="Se déconnecter (pour changer de compte)" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
+                        <Border Margin="14,0,14,6" Background="#124C1B" CornerRadius="8" Padding="12">
+                            <StackPanel>
+                                <TextBlock Text="👤 Compte Google" Foreground="#A5D6A7" FontSize="10" />
+                                <TextBlock x:Name="AccountEmailText" Text="Non connecté" Foreground="White"
+                                           FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,3,0,8" />
+                                <Button x:Name="LogoutButton" Content="🔓 Se déconnecter"
+                                        Click="Deconnexion_Click" Margin="0" HorizontalAlignment="Stretch"
+                                        Padding="8,6" ToolTip="Se déconnecter (pour changer de compte)" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="VersionText" Foreground="#6FA06F" FontSize="10"
+                                   HorizontalAlignment="Center" Margin="0,0,0,8" />
+                    </StackPanel>
                 </DockPanel>
             </Border>
 
@@ -82,6 +85,8 @@
                             Visibility="Collapsed" Click="AnnulerConnexion_Click" />
                     <TextBlock x:Name="LoginStatus" Foreground="#B71C1C" TextWrapping="Wrap"
                                TextAlignment="Center" Margin="0,16,0,0" />
+                    <TextBlock x:Name="LoginVersionText" Foreground="#AAAAAA" FontSize="10"
+                               HorizontalAlignment="Center" Margin="0,18,0,0" />
                 </StackPanel>
             </Border>
         </Grid>

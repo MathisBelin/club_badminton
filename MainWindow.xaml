@@ -51,8 +51,8 @@
                                         Padding="8,6" ToolTip="Se déconnecter (pour changer de compte)" />
                             </StackPanel>
                         </Border>
-                        <TextBlock x:Name="VersionText" Foreground="#6FA06F" FontSize="10"
-                                   HorizontalAlignment="Center" Margin="0,0,0,8" />
+                        <TextBlock x:Name="VersionText" Foreground="#A5D6A7" FontSize="11"
+                                   HorizontalAlignment="Center" Margin="0,0,0,10" />
                     </StackPanel>
                 </DockPanel>
             </Border>

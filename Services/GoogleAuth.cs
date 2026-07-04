@@ -17,6 +17,22 @@ namespace BadmintonClub.Services;
 /// </summary>
 public static class GoogleAuth
 {
+    /// <summary>
+    /// Ensemble unique des permissions Google (Contacts + profil + Sheets + Drive).
+    /// Partagé par tous les services → une seule autorisation, un seul écran de consentement.
+    /// </summary>
+    public static readonly string[] AllScopes =
+    {
+        "https://www.googleapis.com/auth/contacts",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    };
+
+    /// <summary>Clé de jeton unique et partagée (un seul compte, un seul jeton pour toute l'appli).</summary>
+    public const string SharedUser = "user-badminton";
+
     /// <summary>Indique s'il existe déjà un jeton stocké pour cet utilisateur (connexion possible sans navigateur).</summary>
     public static bool HasStoredToken(string user)
     {
@@ -154,11 +170,15 @@ internal sealed class LoopbackBrowserCodeReceiver : ICodeReceiver
     private static void WriteBrowserResponse(HttpListenerContext context, bool success)
     {
         var message = success
-            ? "Autorisation reçue. Vous pouvez fermer cet onglet et revenir à l'application."
+            ? "Connexion réussie ✅<br>Vous pouvez fermer cet onglet et revenir à l'application."
             : "En attente...";
-        var html = $"<html><head><meta charset=\"utf-8\"></head>" +
-                   $"<body style=\"font-family:sans-serif;text-align:center;margin-top:60px\">" +
-                   $"<h2>Club de Badminton</h2><p>{message}</p></body></html>";
+        // On tente de fermer l'onglet automatiquement (le navigateur peut le refuser).
+        var autoClose = success
+            ? "<script>setTimeout(function(){window.open('','_self');window.close();},600);</script>"
+            : "";
+        var html = "<html><head><meta charset=\"utf-8\"></head>" +
+                   "<body style=\"font-family:sans-serif;text-align:center;margin-top:60px;color:#233323\">" +
+                   $"<h2>🏸 Club de Badminton</h2><p style=\"font-size:16px\">{message}</p>{autoClose}</body></html>";
         var buffer = Encoding.UTF8.GetBytes(html);
 
         try

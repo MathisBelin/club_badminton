@@ -26,15 +26,10 @@ public sealed record GoogleContact(string ResourceName, string Prenom, string No
 /// </summary>
 public class GoogleContactsService
 {
-    private static readonly string[] Scopes =
-    {
-        PeopleServiceService.Scope.Contacts,
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/userinfo.profile"
-    };
+    // Autorisation unique partagée (Contacts + profil + Sheets + Drive) → un seul consentement.
+    private static readonly string[] Scopes = GoogleAuth.AllScopes;
     private const string AppName = "BadmintonClub";
-    // Suffixe versionné : force un nouveau consentement quand les scopes changent.
-    private const string User = "user-contacts-v2";
+    private const string User = GoogleAuth.SharedUser;
 
     private PeopleServiceService? _service;
 

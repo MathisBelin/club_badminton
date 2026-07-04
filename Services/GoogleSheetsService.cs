@@ -38,16 +38,10 @@ public sealed record SheetSharing(bool LinkAccess, string Role);
 /// </summary>
 public class GoogleSheetsService
 {
-    // Drive complet : nécessaire pour lister/supprimer aussi les Sheets créés hors de l'appli.
-    private static readonly string[] Scopes =
-    {
-        SheetsService.Scope.Spreadsheets,
-        DriveService.Scope.Drive
-    };
-
+    // Autorisation unique partagée avec les Contacts → un seul jeton, un seul consentement.
+    private static readonly string[] Scopes = GoogleAuth.AllScopes;
     private const string AppName = "BadmintonClub";
-    // Clé distincte du précédent scope (drive.file) : force un nouveau consentement.
-    private const string User = "user-sheets-drive";
+    private const string User = GoogleAuth.SharedUser;
 
     /// <summary>
     /// Crée un Google Sheet vierge, le partage en « tout le monde avec le lien = Éditeur »,

@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly ContactsView _contactsView;
     private readonly LabelsView _labelsView;
     private readonly AssociationView _associationView;
+    private readonly PendingView _pendingView;
     private readonly EmailView _emailView;
     private readonly SheetsView _sheetsView;
     private readonly AutoSyncView _autoSyncView;
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
         _contactsView = new ContactsView(_services);
         _labelsView = new LabelsView(_services);
         _associationView = new AssociationView(_services);
+        _pendingView = new PendingView(_services);
         _emailView = new EmailView(_services);
         _sheetsView = new SheetsView(_services);
         _autoSyncView = new AutoSyncView(_services);
@@ -35,6 +37,13 @@ public partial class MainWindow : Window
         {
             NavAssociation.IsChecked = true;
             _associationView.ShowForLabel(resourceName);
+        };
+
+        // Depuis la page Association : ouvrir « Personnes en attente » filtré sur le libellé courant.
+        _associationView.OpenPendingRequested += resourceName =>
+        {
+            NavPending.IsChecked = true;
+            _pendingView.ShowForLabel(resourceName);
         };
 
         // Sélection initiale : Contacts (le contenu est prêt derrière l'écran de connexion).
@@ -243,6 +252,7 @@ public partial class MainWindow : Window
             "contacts" => _contactsView,
             "labels" => _labelsView,
             "association" => _associationView,
+            "pending" => _pendingView,
             "email" => _emailView,
             "sheets" => _sheetsView,
             "autosync" => _autoSyncView,

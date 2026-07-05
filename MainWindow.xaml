@@ -35,6 +35,9 @@
                         <RadioButton x:Name="NavAssociation" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="association" Content="🔗   Association"
                                      Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavPending" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="pending" Content="⏳   Personnes en attente"
+                                     Checked="Nav_Checked" />
                         <RadioButton x:Name="NavEmail" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="email" Checked="Nav_Checked">
                             <StackPanel Orientation="Horizontal">

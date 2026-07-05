@@ -94,6 +94,34 @@ public static class CsvContactImporter
         return result;
     }
 
+    /// <summary>
+    /// Lignes ayant des informations (nom / prénom / téléphone) mais SANS e-mail (colonne e-mail
+    /// vide ou sans « @ »). Sert à repérer les inscriptions incomplètes.
+    /// </summary>
+    public static List<(string Nom, string Prenom, string Tel)> BuildIncompleteFromColumns(
+        IReadOnlyList<string[]> rows, int? nom, int? prenom, int? tel, int? email)
+    {
+        var result = new List<(string, string, string)>();
+        foreach (var fields in rows)
+        {
+            string Get(int? idx) =>
+                idx is int i && i >= 0 && i < fields.Length ? fields[i].Trim() : string.Empty;
+
+            var mail = Get(email);
+            if (mail.Contains('@'))
+                continue; // a un e-mail → traité comme contact normal
+
+            var n = Get(nom);
+            var p = Get(prenom);
+            var t = Get(tel);
+            if (string.IsNullOrWhiteSpace(n) && string.IsNullOrWhiteSpace(p) && string.IsNullOrWhiteSpace(t))
+                continue; // ligne vide
+
+            result.Add((n, p, Helpers.PhoneFormatter.Format(t)));
+        }
+        return result;
+    }
+
     /// <summary>Ne conserve que les lignes de <paramref name="startRow"/> à <paramref name="endRow"/> (1-based ; endRow ≤ 0 = jusqu'à la fin).</summary>
     public static IReadOnlyList<string[]> SliceRows(IReadOnlyList<string[]> rows, int startRow, int endRow)
     {

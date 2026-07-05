@@ -25,6 +25,9 @@ public class AppServices
     /// <summary>Synchronisations automatiques configurées.</summary>
     public ObservableCollection<AutoSyncConfig> AutoSyncs { get; } = new();
 
+    /// <summary>Personnes avec des infos mais sans e-mail (inscriptions incomplètes), par libellé.</summary>
+    public ObservableCollection<PendingPerson> Pending { get; } = new();
+
     private List<LabelItem>? _labelsCache;
 
     public AppServices()
@@ -270,7 +273,29 @@ public class AppServices
     {
         config.Enabled = false;
         AutoSyncs.Remove(config);
+        // Retire les personnes en attente rattachées à cette synchro.
+        for (var i = Pending.Count - 1; i >= 0; i--)
+            if (string.Equals(Pending[i].LabelResourceName, config.LabelResourceName, StringComparison.Ordinal))
+                Pending.RemoveAt(i);
         SaveSyncs();
+    }
+
+    /// <summary>Remplace les personnes en attente d'un libellé par la liste fraîchement lue.</summary>
+    private void UpdatePending(AutoSyncConfig config, List<(string Nom, string Prenom, string Tel)> incompletes)
+    {
+        for (var i = Pending.Count - 1; i >= 0; i--)
+            if (string.Equals(Pending[i].LabelResourceName, config.LabelResourceName, StringComparison.Ordinal))
+                Pending.RemoveAt(i);
+
+        foreach (var (nom, prenom, tel) in incompletes)
+            Pending.Add(new PendingPerson
+            {
+                LabelResourceName = config.LabelResourceName,
+                LabelName = config.LabelName,
+                Nom = nom,
+                Prenom = prenom,
+                Telephone = tel
+            });
     }
 
     /// <summary>Vrai si un libellé est déjà ciblé par une autre synchro (unicité).</summary>
@@ -350,12 +375,30 @@ public class AppServices
             return (0, 0);
 
         var rows = await Sheets.ReadRowsAsync(id, BuildDataRange(config.StartRow, config.EndRow));
-        var parsed = CsvContactImporter.BuildFromColumns(rows,
-                CsvContactImporter.ColIndex(config.ColNom),
-                CsvContactImporter.ColIndex(config.ColPrenom),
-                CsvContactImporter.ColIndex(config.ColTel),
-                CsvContactImporter.ColIndex(config.ColEmail))
+
+        int? colNom = CsvContactImporter.ColIndex(config.ColNom);
+        int? colPrenom = CsvContactImporter.ColIndex(config.ColPrenom);
+        int? colTel = CsvContactImporter.ColIndex(config.ColTel);
+        int? colEmail = CsvContactImporter.ColIndex(config.ColEmail);
+
+        var parsed = CsvContactImporter.BuildFromColumns(rows, colNom, colPrenom, colTel, colEmail)
+            .Select(c =>
+            {
+                // E-mail avec faute de frappe (ex. virgule à la place du point) : on tente une
+                // correction automatique ; si le format devient valide, on l'utilise.
+                if (!EmailValidator.IsValid(c.Email))
+                {
+                    var corrected = EmailValidator.Suggest(c.Email);
+                    if (EmailValidator.IsValid(corrected))
+                        c.Email = corrected;
+                }
+                return c;
+            })
             .Where(c => EmailValidator.IsValid(c.Email)).ToList();
+
+        // Personnes ayant renseigné des infos (nom/prénom/tél) mais SANS e-mail : inscription
+        // incomplète → on les mémorise pour la page « Personnes en attente » (par libellé).
+        UpdatePending(config, CsvContactImporter.BuildIncompleteFromColumns(rows, colNom, colPrenom, colTel, colEmail));
 
         // Adhérent local correspondant à chaque ligne du fichier (existant fusionné ou nouveau).
         var sheetContacts = new List<Adherent>();

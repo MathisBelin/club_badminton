@@ -14,8 +14,10 @@
                            Foreground="#555555" FontWeight="SemiBold" />
                 <ctrl:MultiSelectComboBox x:Name="LabelSelect" SingleSelect="True" Width="240" VerticalAlignment="Center" />
                 <Button Content="👥 Associer" Style="{StaticResource PrimaryButton}"
-                        Margin="10,0,16,0" Click="Associer_Click"
+                        Margin="10,0,10,0" Click="Associer_Click"
                         ToolTip="Associer des contacts à un libellé" />
+                <Button Content="⏳ Personnes en attente" Click="Pending_Click" Margin="0,0,16,0"
+                        ToolTip="Voir les personnes ayant renseigné des infos mais pas d'e-mail" />
                 <ctrl:SearchBox x:Name="SearchBox" Width="220" TextChanged="SearchBox_TextChanged" />
             </StackPanel>
         </StackPanel>

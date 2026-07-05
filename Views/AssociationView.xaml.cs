@@ -180,7 +180,13 @@ public partial class AssociationView : UserControl, IActivableView
         }
     }
 
-    // ---- Associer ---------------------------------------------------------
+    // ---- Associer / Personnes en attente ---------------------------------
+
+    /// <summary>Demande d'ouvrir la page « Personnes en attente » (libellé courant en paramètre).</summary>
+    public event Action<string?>? OpenPendingRequested;
+
+    private void Pending_Click(object sender, RoutedEventArgs e)
+        => OpenPendingRequested?.Invoke(LabelSelect.SelectedOption?.Tag as string);
 
     private async void Associer_Click(object sender, RoutedEventArgs e)
     {

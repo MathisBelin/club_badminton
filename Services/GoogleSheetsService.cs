@@ -327,6 +327,48 @@ public class GoogleSheetsService
         catch (Exception ex) { throw GoogleErrors.Translate(ex, "Impossible d'exporter le classeur en CSV."); }
     }
 
+    /// <summary>Exporte le classeur au format Excel (.xlsx) vers un fichier local.</summary>
+    public async Task DownloadXlsxAsync(string spreadsheetId, string destinationPath, CancellationToken ct = default)
+    {
+        var credential = await GoogleAuth.AuthorizeAsync(Scopes, User, ct);
+        try
+        {
+            using var drive = new DriveService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = AppName
+            });
+
+            var request = drive.Files.Export(
+                spreadsheetId, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            await using var fs = System.IO.File.Create(destinationPath);
+            await request.DownloadAsync(fs, ct);
+        }
+        catch (GoogleSyncException) { throw; }
+        catch (Exception ex) { throw GoogleErrors.Translate(ex, "Impossible d'exporter le classeur en Excel."); }
+    }
+
+    /// <summary>Renomme le classeur (titre du fichier Drive).</summary>
+    public async Task RenameAsync(string spreadsheetId, string newName, CancellationToken ct = default)
+    {
+        var credential = await GoogleAuth.AuthorizeAsync(Scopes, User, ct);
+        try
+        {
+            using var drive = new DriveService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = AppName
+            });
+
+            var body = new Google.Apis.Drive.v3.Data.File { Name = newName };
+            var request = drive.Files.Update(body, spreadsheetId);
+            request.Fields = "id,name";
+            await request.ExecuteAsync(ct);
+        }
+        catch (GoogleSyncException) { throw; }
+        catch (Exception ex) { throw GoogleErrors.Translate(ex, "Impossible de renommer le classeur."); }
+    }
+
     /// <summary>Supprime définitivement un Google Sheet créé par l'application.</summary>
     public async Task DeleteSpreadsheetAsync(string spreadsheetId, CancellationToken ct = default)
     {

@@ -39,7 +39,8 @@
 
         <Grid>
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single"
+                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
+                  SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader"
                   MouseDoubleClick="Grid_MouseDoubleClick">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="42" CanUserResize="False">

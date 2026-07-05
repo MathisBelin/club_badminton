@@ -129,7 +129,7 @@ public partial class SheetsView : UserControl, IActivableView
 
     private void Grid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (Grid.SelectedItem is SheetRecord s)
+        if (Grid.CurrentItem is SheetRecord s)
             BrowserService.Open(s.Url);
     }
 
@@ -153,6 +153,36 @@ public partial class SheetsView : UserControl, IActivableView
 
         var window = new SheetOptionsWindow(_services.Sheets, s) { Owner = Window.GetWindow(this) };
         window.ShowDialog();
+    }
+
+    private async void Renommer_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SheetRecord s)
+            return;
+
+        var dialog = new InputDialog("Renommer le classeur", "Nouveau nom du classeur :", s.Nom)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        var newName = dialog.Value.Trim();
+        if (string.IsNullOrWhiteSpace(newName) || newName == s.Nom)
+            return;
+
+        var owner = Window.GetWindow(this)!;
+        var result = await ProgressRunner.RunBusyAsync(owner, "Renommage du classeur…",
+            () => _services.Sheets.RenameAsync(s.SpreadsheetId, newName));
+
+        if (result.Failed > 0)
+        {
+            MessageBox.Show(owner, result.LastError, "Renommer", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        s.Nom = newName;                          // notifie la grille
+        _services.SheetRepository.Save(_sheets);   // persiste le nouveau nom
     }
 
     private async void Supprimer_Click(object sender, RoutedEventArgs e)

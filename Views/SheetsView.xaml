@@ -48,7 +48,8 @@
 
         <Grid>
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single"
+                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
+                  SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader"
                   MouseDoubleClick="Grid_MouseDoubleClick">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="42" CanUserResize="False">
@@ -68,7 +69,7 @@
                                     Binding="{Binding DateCreation, StringFormat=\{0:dd/MM/yyyy HH:mm\}}"
                                     Width="140" />
                 <DataGridTextColumn Header="Lien" Binding="{Binding Url}" Width="2*" />
-                <DataGridTemplateColumn Header="Actions" Width="180" CanUserResize="False">
+                <DataGridTemplateColumn Header="Actions" Width="220" CanUserResize="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -76,8 +77,10 @@
                                         ToolTip="Ouvrir le lien" Click="Ouvrir_Click" />
                                 <Button Style="{StaticResource RowButton}" Content="📋"
                                         ToolTip="Copier le lien" Click="Copier_Click" />
+                                <Button Style="{StaticResource RowButton}" Content="✏"
+                                        ToolTip="Renommer le classeur" Click="Renommer_Click" />
                                 <Button Style="{StaticResource RowButton}" Content="⚙"
-                                        ToolTip="Options (partage, CSV)" Click="Options_Click" />
+                                        ToolTip="Options (partage, export, modèle)" Click="Options_Click" />
                                 <Button Style="{StaticResource RowButton}" Content="🗑"
                                         ToolTip="Supprimer" Click="Supprimer_Click" />
                             </StackPanel>

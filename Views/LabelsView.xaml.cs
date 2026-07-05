@@ -167,7 +167,7 @@ public partial class LabelsView : UserControl, IActivableView
 
     private void Grid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (Grid.SelectedItem is LabelItem label)
+        if (Grid.CurrentItem is LabelItem label)
             OpenAssociationRequested?.Invoke(label.ResourceName);
     }
 

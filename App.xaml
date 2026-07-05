@@ -303,7 +303,14 @@
             <Setter Property="ColumnHeaderHeight" Value="36" />
             <Setter Property="RowHeaderWidth" Value="0" />
             <Setter Property="SelectionUnit" Value="FullRow" />
+            <!-- Perf : virtualisation lignes + colonnes en mode recyclage (conteneurs réutilisés
+                 au lieu d'être recréés à chaque filtrage) → filtrage quasi instantané. -->
             <Setter Property="EnableRowVirtualization" Value="True" />
+            <Setter Property="EnableColumnVirtualization" Value="True" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <!-- Désélectionne la cellule quand on clique/focus hors du tableau. -->
+            <EventSetter Event="LostKeyboardFocus" Handler="DataGrid_LostKeyboardFocus" />
         </Style>
 
         <Style TargetType="DataGridColumnHeader">
@@ -330,20 +337,26 @@
 
         <Style TargetType="DataGridCell">
             <Setter Property="Foreground" Value="#333333" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="DataGridCell">
                         <Border Background="{TemplateBinding Background}" Padding="8,0"
-                                BorderThickness="0">
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter VerticalAlignment="Center" />
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
+                <!-- Cellule sélectionnée (mode copie) : surlignage vert net + bordure accent. -->
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="Transparent" />
-                    <Setter Property="Foreground" Value="#233323" />
+                    <Setter Property="Background" Value="#A5D6A7" />
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="Foreground" Value="#143C17" />
                 </Trigger>
             </Style.Triggers>
         </Style>

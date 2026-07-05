@@ -73,7 +73,7 @@ public partial class AutoSyncView : UserControl, IActivableView
 
     private void Grid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (Grid.SelectedItem is AutoSyncConfig c)
+        if (Grid.CurrentItem is AutoSyncConfig c)
             OpenEdit(c);
     }
 

@@ -13,7 +13,16 @@ namespace BadmintonClub.Views;
 public partial class ContactsView : UserControl, IActivableView
 {
     private readonly AppServices _services;
-    private ICollectionView _view = null!;
+
+    // Pagination : la grille n'affiche qu'une page ; tri/filtre s'appliquent sur la liste complète.
+    private readonly ObservableCollection<Adherent> _pageItems = new();
+    private List<Adherent> _filtered = new();      // adhérents filtrés + triés (toutes pages)
+    private int _pageSize = 20;
+    private int _pageIndex;                          // page courante (0-based)
+    private string _sortMember = nameof(Adherent.Nom);
+    private ListSortDirection _sortDir = ListSortDirection.Ascending;
+    private bool _rebuildQueued;
+    private bool _ready; // évite que les handlers agissent pendant InitializeComponent
 
     // Filtre par libellé (recherche avancée).
     private const string NoLabelTag = "__none__";
@@ -21,16 +30,14 @@ public partial class ContactsView : UserControl, IActivableView
     private bool _filterNoLabel;
     private HashSet<string>? _allLabelEmails; // union des membres de tous les libellés (pour « sans libellé »)
     private readonly Dictionary<string, HashSet<string>> _labelMemberCache = new(StringComparer.Ordinal);
+    private bool _hideIncomplete; // masque les contacts sans nom, ni prénom, ni téléphone
 
     public ContactsView(AppServices services)
     {
         InitializeComponent();
         _services = services;
 
-        _view = CollectionViewSource.GetDefaultView(_services.Adherents);
-        _view.SortDescriptions.Add(new SortDescription(nameof(Adherent.Nom), ListSortDirection.Ascending));
-        _view.Filter = FilterAdherent;
-        Grid.ItemsSource = _view;
+        Grid.ItemsSource = _pageItems;
 
         LabelFilter.Placeholder = "Choisir des libellés";
         LabelFilter.SelectionChanged += LabelFilter_SelectionChanged;
@@ -42,14 +49,13 @@ public partial class ContactsView : UserControl, IActivableView
             a.PropertyChanged += Adherent_PropertyChanged;
         _services.Adherents.CollectionChanged += Adherents_CollectionChanged;
 
-        UpdateCount();
+        _ready = true;
+        RebuildAll();
     }
 
     public void OnActivated()
     {
-        _view.Refresh();
-        UpdateCount();
-        UpdateBulkBar();
+        RefreshView();
         _ = PopulateLabelFilterAsync();
     }
 
@@ -63,8 +69,7 @@ public partial class ContactsView : UserControl, IActivableView
         _labelMemberCache.Clear();
         LabelFilter.ClearSelection();
 
-        _view?.Refresh();
-        UpdateCount();
+        RebuildAll();
     }
 
     /// <summary>Synchronisation deux sens avec Google au lancement. Silencieuse.</summary>
@@ -73,8 +78,7 @@ public partial class ContactsView : UserControl, IActivableView
         try
         {
             await _services.SyncContactsAsync();
-            _view.Refresh();
-            UpdateCount();
+            RefreshView();
         }
         catch (GoogleSyncException)
         {
@@ -82,11 +86,16 @@ public partial class ContactsView : UserControl, IActivableView
         }
     }
 
-    // ---- Filtrage / comptage ---------------------------------------------
+    // ---- Filtrage / pagination -------------------------------------------
 
-    private bool FilterAdherent(object obj)
+    /// <summary>Un adhérent passe-t-il le filtre (recherche + libellé + complétude) ?</summary>
+    private bool PassesFilter(Adherent a)
     {
-        if (obj is not Adherent a)
+        // Masque les contacts sans nom NI prénom NI téléphone (souvent juste un e-mail importé).
+        if (_hideIncomplete &&
+            string.IsNullOrWhiteSpace(a.Nom) &&
+            string.IsNullOrWhiteSpace(a.Prenom) &&
+            string.IsNullOrWhiteSpace(a.Telephone))
             return false;
 
         // Filtre par libellé (recherche avancée).
@@ -110,10 +119,111 @@ public partial class ContactsView : UserControl, IActivableView
         bool Contains(string? v) => v != null && v.Contains(term, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => RebuildAll();
+
+    private void HideIncomplete_Changed(object sender, RoutedEventArgs e)
     {
-        _view?.Refresh();
+        if (!_ready)
+            return;
+        _hideIncomplete = HideIncompleteCheck.IsChecked == true;
+        RebuildAll();
+    }
+
+    // ---- Pagination : construction de la page affichée -------------------
+
+    /// <summary>Recompute la liste filtrée+triée, revient à la 1re page, puis affiche.</summary>
+    private void RebuildAll()
+    {
+        _pageIndex = 0;
+        Rebuild();
+    }
+
+    /// <summary>Recompute en conservant la page courante (clampée), puis affiche.</summary>
+    private void RefreshView() => Rebuild();
+
+    private void Rebuild()
+    {
+        _filtered = _services.Adherents.Where(PassesFilter).ToList();
+        SortFiltered();
+        RefreshPage();
+    }
+
+    private void SortFiltered()
+    {
+        Func<Adherent, string> key = _sortMember switch
+        {
+            nameof(Adherent.Prenom) => a => a.Prenom ?? string.Empty,
+            nameof(Adherent.Telephone) => a => a.Telephone ?? string.Empty,
+            nameof(Adherent.Email) => a => a.Email ?? string.Empty,
+            _ => a => a.Nom ?? string.Empty
+        };
+        _filtered = (_sortDir == ListSortDirection.Ascending
+            ? _filtered.OrderBy(key, StringComparer.CurrentCultureIgnoreCase)
+            : _filtered.OrderByDescending(key, StringComparer.CurrentCultureIgnoreCase)).ToList();
+    }
+
+    /// <summary>Remplit la grille avec la page courante et met à jour la barre de pagination.</summary>
+    private void RefreshPage()
+    {
+        var total = _filtered.Count;
+        var pageCount = Math.Max(1, (total + _pageSize - 1) / _pageSize);
+        _pageIndex = Math.Clamp(_pageIndex, 0, pageCount - 1);
+
+        _pageItems.Clear();
+        foreach (var a in _filtered.Skip(_pageIndex * _pageSize).Take(_pageSize))
+            _pageItems.Add(a);
+
+        PageInfo.Text = $"Page {_pageIndex + 1} / {pageCount}";
+        PrevBtn.IsEnabled = _pageIndex > 0;
+        NextBtn.IsEnabled = _pageIndex < pageCount - 1;
+
         UpdateCount();
+        UpdateBulkBar();
+    }
+
+    private void Grid_Sorting(object sender, DataGridSortingEventArgs e)
+    {
+        var member = e.Column.SortMemberPath;
+        if (string.IsNullOrEmpty(member))
+            return;
+
+        // Bascule ascendant/descendant sur la même colonne, sinon nouvelle colonne ascendante.
+        _sortDir = _sortMember == member && _sortDir == ListSortDirection.Ascending
+            ? ListSortDirection.Descending
+            : ListSortDirection.Ascending;
+        _sortMember = member;
+
+        foreach (var c in Grid.Columns)
+            c.SortDirection = null;
+        e.Column.SortDirection = _sortDir;
+
+        e.Handled = true; // on trie la liste complète nous-mêmes (pas seulement la page)
+        SortFiltered();
+        RefreshPage();
+    }
+
+    private void PageSize_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready)
+            return;
+        if (PageSizeCombo?.SelectedItem is ComboBoxItem item &&
+            int.TryParse(item.Content?.ToString(), out var size) && size > 0)
+        {
+            _pageSize = size;
+            _pageIndex = 0;
+            RefreshPage();
+        }
+    }
+
+    private void PrevPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pageIndex > 0) { _pageIndex--; RefreshPage(); }
+    }
+
+    private void NextPage_Click(object sender, RoutedEventArgs e)
+    {
+        _pageIndex++;
+        RefreshPage();
     }
 
     private void Email_Click(object sender, RoutedEventArgs e)
@@ -173,7 +283,7 @@ public partial class ContactsView : UserControl, IActivableView
         if (_labelFilterEmails != null && selected.Any(s => !valid.Contains(s)))
         {
             _labelFilterEmails = null;
-            _view.Refresh();
+            RebuildAll();
         }
     }
 
@@ -188,8 +298,7 @@ public partial class ContactsView : UserControl, IActivableView
         if (realLabels.Count == 0 && !_filterNoLabel)
         {
             _labelFilterEmails = null;
-            _view.Refresh();
-            UpdateCount();
+            RebuildAll();
             return;
         }
 
@@ -228,8 +337,7 @@ public partial class ContactsView : UserControl, IActivableView
             Cursor = System.Windows.Input.Cursors.Arrow;
         }
 
-        _view.Refresh();
-        UpdateCount();
+        RebuildAll();
     }
 
     private async Task<HashSet<string>> MemberEmailsAsync(string resourceName)
@@ -247,7 +355,7 @@ public partial class ContactsView : UserControl, IActivableView
     private void UpdateCount()
     {
         var total = _services.Adherents.Count;
-        var shown = _view?.Cast<object>().Count() ?? total;
+        var shown = _filtered.Count;
         CountText.Text = shown == total
             ? $"{total} adhérent(s)"
             : $"{shown} sur {total} adhérent(s)";
@@ -263,8 +371,8 @@ public partial class ContactsView : UserControl, IActivableView
         }
     }
 
-    /// <summary>Adhérents actuellement affichés (après recherche + filtre par libellé).</summary>
-    private List<Adherent> FilteredAdherents() => _view.Cast<Adherent>().ToList();
+    /// <summary>Adhérents filtrés (toutes pages) — pour l'export.</summary>
+    private List<Adherent> FilteredAdherents() => _filtered;
 
     // ---- Suivi de la sélection (cases à cocher) ---------------------------
 
@@ -277,8 +385,15 @@ public partial class ContactsView : UserControl, IActivableView
             foreach (Adherent a in e.NewItems)
                 a.PropertyChanged += Adherent_PropertyChanged;
 
-        UpdateCount();
-        UpdateBulkBar();
+        // Coalescé : plusieurs ajouts rapprochés (import, synchro) → une seule reconstruction.
+        if (_rebuildQueued)
+            return;
+        _rebuildQueued = true;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            _rebuildQueued = false;
+            RefreshView();
+        }));
     }
 
     private void Adherent_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -301,18 +416,18 @@ public partial class ContactsView : UserControl, IActivableView
             Animations.FadeOutCollapse(BulkBar);
         }
 
-        var filtered = FilteredAdherents();
-        var filteredSel = filtered.Count(a => a.IsSelected);
-        SelectAllBox.IsChecked = filteredSel == 0 ? false
-            : filteredSel == filtered.Count && filtered.Count > 0 ? true
+        // La case d'en-tête reflète la sélection de la PAGE affichée.
+        var pageSel = _pageItems.Count(a => a.IsSelected);
+        SelectAllBox.IsChecked = pageSel == 0 ? false
+            : pageSel == _pageItems.Count && _pageItems.Count > 0 ? true
             : null;
     }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e)
     {
-        // On (dé)sélectionne uniquement les adhérents actuellement affichés (filtrés).
+        // Sélectionne / désélectionne les adhérents de la page affichée.
         var check = SelectAllBox.IsChecked == true;
-        foreach (var a in FilteredAdherents())
+        foreach (var a in _pageItems.ToList())
             a.IsSelected = check;
     }
 
@@ -371,7 +486,7 @@ public partial class ContactsView : UserControl, IActivableView
         }
 
         _services.SaveAdherents();
-        _view.Refresh();
+        RefreshView();
         UpdateCount();
 
         // Envoi vers Google (création ou mise à jour) + libellés cibles.
@@ -390,7 +505,7 @@ public partial class ContactsView : UserControl, IActivableView
                         await _services.Contacts.SetMembershipAsync(a.GoogleResourceName, groupResource, add: true);
                 });
             _services.SaveAdherents();
-            _view.Refresh();
+            RefreshView();
             UpdateCount();
         }
 
@@ -473,7 +588,7 @@ public partial class ContactsView : UserControl, IActivableView
         var nouvel = dialog.Adherent;
         _services.Adherents.Add(nouvel);
         _services.SaveAdherents();
-        _view.Refresh();
+        RefreshView();
 
         var owner = Window.GetWindow(this)!;
         var result = await ProgressRunner.RunBusyAsync(owner, "Ajout du contact…",
@@ -507,7 +622,7 @@ public partial class ContactsView : UserControl, IActivableView
 
     private void Grid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (Grid.SelectedItem is Adherent a)
+        if (Grid.CurrentItem is Adherent a)
             Modifier(a);
     }
 
@@ -525,7 +640,7 @@ public partial class ContactsView : UserControl, IActivableView
 
         adherent.CopyFrom(dialog.Adherent);
         _services.SaveAdherents();
-        _view.Refresh();
+        RefreshView();
 
         var owner = Window.GetWindow(this)!;
         var result = await ProgressRunner.RunBusyAsync(owner, "Mise à jour du contact…",

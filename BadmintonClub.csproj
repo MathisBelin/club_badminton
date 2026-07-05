@@ -11,7 +11,7 @@
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Product>Club de Badminton</Product>
     <AssemblyTitle>Club de Badminton</AssemblyTitle>
     <Company>Club de Badminton</Company>
@@ -44,4 +44,6 @@
   </ItemGroup>
 
 </Project>
+
+
 

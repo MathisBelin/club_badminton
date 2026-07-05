@@ -32,6 +32,10 @@
                 <Button x:Name="ClearLabelBtn" Content="✕" Visibility="Collapsed" MinWidth="0"
                         Padding="9,5" Margin="6,0,0,0" Click="ResetFilter_Click"
                         ToolTip="Effacer le filtre par libellé" />
+                <CheckBox x:Name="HideIncompleteCheck" VerticalAlignment="Center" Margin="20,0,0,0"
+                          Content="Masquer les contacts sans nom / prénom / tél"
+                          Checked="HideIncomplete_Changed" Unchecked="HideIncomplete_Changed"
+                          ToolTip="Cache les contacts qui n'ont qu'une adresse e-mail" />
             </StackPanel>
         </StackPanel>
 
@@ -54,10 +58,30 @@
             </Grid>
         </Border>
 
+        <!-- Barre de pagination -->
+        <Border DockPanel.Dock="Bottom" Padding="0,10,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock Text="Lignes par page :" VerticalAlignment="Center"
+                           Foreground="#555555" Margin="0,0,8,0" />
+                <ComboBox x:Name="PageSizeCombo" Width="70" SelectionChanged="PageSize_Changed"
+                          VerticalContentAlignment="Center">
+                    <ComboBoxItem IsSelected="True">20</ComboBoxItem>
+                    <ComboBoxItem>50</ComboBoxItem>
+                    <ComboBoxItem>100</ComboBoxItem>
+                </ComboBox>
+                <Button x:Name="PrevBtn" Content="◀ Précédent" Click="PrevPage_Click" Margin="16,0,0,0" />
+                <TextBlock x:Name="PageInfo" VerticalAlignment="Center" Foreground="#555555"
+                           Margin="10,0,10,0" MinWidth="90" TextAlignment="Center" />
+                <Button x:Name="NextBtn" Content="Suivant ▶" Click="NextPage_Click" Margin="0" />
+            </StackPanel>
+        </Border>
+
         <!-- Tableau -->
         <Grid>
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single"
+                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
+                  SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader"
+                  Sorting="Grid_Sorting"
                   MouseDoubleClick="Grid_MouseDoubleClick">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="42" CanUserResize="False">
@@ -72,9 +96,10 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Nom" Binding="{Binding Nom}" Width="*" />
+                <DataGridTextColumn Header="Nom" Binding="{Binding Nom}" Width="*" SortDirection="Ascending" />
                 <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="*" />
-                <DataGridTemplateColumn Header="Téléphone" Width="150">
+                <DataGridTemplateColumn Header="Téléphone" Width="150" SortMemberPath="Telephone"
+                                        ClipboardContentBinding="{Binding Telephone, Converter={StaticResource PhoneFormat}}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock VerticalAlignment="Center"
@@ -83,7 +108,8 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="E-mail" Width="2*">
+                <DataGridTemplateColumn Header="E-mail" Width="2*" SortMemberPath="Email"
+                                        ClipboardContentBinding="{Binding Email}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">

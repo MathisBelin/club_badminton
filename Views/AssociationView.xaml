@@ -41,7 +41,8 @@
 
         <Grid>
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
+                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
+                  SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="42" CanUserResize="False">
                     <DataGridTemplateColumn.Header>
@@ -57,7 +58,8 @@
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Nom" Binding="{Binding Adherent.Nom}" Width="*" />
                 <DataGridTextColumn Header="Prénom" Binding="{Binding Adherent.Prenom}" Width="*" />
-                <DataGridTemplateColumn Header="Téléphone" Width="150">
+                <DataGridTemplateColumn Header="Téléphone" Width="150"
+                                        ClipboardContentBinding="{Binding Adherent.Telephone, Converter={StaticResource PhoneFormat}}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock VerticalAlignment="Center"
@@ -66,7 +68,8 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="E-mail" Width="2*">
+                <DataGridTemplateColumn Header="E-mail" Width="2*"
+                                        ClipboardContentBinding="{Binding Adherent.Email}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">

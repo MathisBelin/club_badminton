@@ -23,12 +23,14 @@
 
         <Grid>
             <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                      CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single"
+                      CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
+                      SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader"
                       MouseDoubleClick="Grid_MouseDoubleClick">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Nom" Binding="{Binding Name}" Width="*" />
                     <DataGridTextColumn Header="Libellé cible" Binding="{Binding LabelName}" Width="*" />
-                    <DataGridTemplateColumn Header="Lien" Width="1.6*">
+                    <DataGridTemplateColumn Header="Lien" Width="1.6*"
+                                            ClipboardContentBinding="{Binding SheetUrl}">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">

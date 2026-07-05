@@ -11,7 +11,14 @@ namespace BadmintonClub.Models;
 public class SheetRecord : INotifyPropertyChanged
 {
     public string SpreadsheetId { get; set; } = string.Empty;
-    public string Nom { get; set; } = string.Empty;
+
+    private string _nom = string.Empty;
+    public string Nom
+    {
+        get => _nom;
+        set { _nom = value; OnPropertyChanged(); }
+    }
+
     public string Url { get; set; } = string.Empty;
     public DateTime DateCreation { get; set; } = DateTime.Now;
 

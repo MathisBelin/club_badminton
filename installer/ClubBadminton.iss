@@ -1,10 +1,10 @@
-; Script Inno Setup — installeur « Club de Badminton »
+﻿; Script Inno Setup — installeur « Club de Badminton »
 ; Compilation : ISCC.exe installer\ClubBadminton.iss   (Inno Setup 6)
 ; Prérequis : avoir publié l'exe autonome au préalable :
 ;   dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "Club de Badminton"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "Club de Badminton"
 #define MyAppExeName "BadmintonClub.exe"
 #define PublishDir "..\bin\Release\net8.0-windows\win-x64\publish"
@@ -43,3 +43,5 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Lancer {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+

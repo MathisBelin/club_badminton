@@ -92,10 +92,10 @@ public partial class SheetOptionsWindow : Window
     private async void Modele_Click(object sender, RoutedEventArgs e)
     {
         AppPaths.EnsureModelsFolder();
-        var dest = System.IO.Path.Combine(AppPaths.ModelsFolder, SanitizeFileName(_record.Nom) + ".csv");
+        var dest = System.IO.Path.Combine(AppPaths.ModelsFolder, SanitizeFileName(_record.Nom) + ".xlsx");
 
         var result = await ProgressRunner.RunBusyAsync(this, "Enregistrement du modèle…",
-            () => _sheets.DownloadCsvAsync(_record.SpreadsheetId, dest));
+            () => _sheets.DownloadXlsxAsync(_record.SpreadsheetId, dest));
 
         if (result.Failed > 0)
             MessageBox.Show(this, result.LastError, "Modèle", MessageBoxButton.OK, MessageBoxImage.Warning);

@@ -13,6 +13,7 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        // Le handler DataGrid_LostKeyboardFocus est câblé par l'EventSetter du style DataGrid (App.xaml).
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
@@ -40,5 +41,32 @@ public partial class App : Application
     {
         ErrorLogger.Log("Tâche en arrière-plan", e.Exception);
         e.SetObserved(); // évite que l'app soit tuée par une tâche non observée
+    }
+
+    /// <summary>Efface la sélection de cellule quand le focus quitte le tableau (clic à l'extérieur).</summary>
+    private void DataGrid_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.DataGrid grid)
+            return;
+
+        // On ne désélectionne pas si le focus reste dans le tableau (navigation entre cellules,
+        // clic sur un bouton d'action d'une ligne…).
+        if (e.NewFocus is DependencyObject d && IsInside(d, grid))
+            return;
+
+        grid.UnselectAllCells();
+        grid.CurrentCell = default;
+    }
+
+    private static bool IsInside(DependencyObject? node, DependencyObject ancestor)
+    {
+        while (node != null)
+        {
+            if (ReferenceEquals(node, ancestor))
+                return true;
+            node = System.Windows.Media.VisualTreeHelper.GetParent(node)
+                   ?? System.Windows.LogicalTreeHelper.GetParent(node);
+        }
+        return false;
     }
 }

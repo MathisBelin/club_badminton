@@ -16,6 +16,7 @@ public partial class AssociationView : UserControl, IActivableView
     private readonly AppServices _services;
     private readonly ObservableCollection<MemberRow> _members = new();
     private readonly ICollectionView _view;
+    private int _loadGen; // jeton anti-course : seule la dernière invocation peuple le tableau
 
     public AssociationView(AppServices services)
     {
@@ -98,6 +99,8 @@ public partial class AssociationView : UserControl, IActivableView
 
     private async Task LoadMembersAsync()
     {
+        var gen = ++_loadGen; // marque cette invocation ; une suivante l'invalidera
+
         foreach (var m in _members)
             m.PropertyChanged -= Member_PropertyChanged;
         _members.Clear();
@@ -119,6 +122,10 @@ public partial class AssociationView : UserControl, IActivableView
             var emails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var res in labels)
                 emails.UnionWith(await _services.Contacts.GetLabelMemberEmailsAsync(res));
+
+            // Une invocation plus récente a pris le relais : on n'ajoute rien (évite le doublon).
+            if (gen != _loadGen)
+                return;
 
             foreach (var a in _services.Adherents
                          .Where(a => !string.IsNullOrWhiteSpace(a.Email) && emails.Contains(a.Email))

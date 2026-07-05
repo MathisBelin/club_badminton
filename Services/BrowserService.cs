@@ -77,6 +77,33 @@ public static class BrowserService
         }
     }
 
+    /// <summary>Ouvre Gmail avec un nouveau message pré-adressé à <paramref name="email"/>.</summary>
+    public static void OpenGmailCompose(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return;
+        Open($"https://mail.google.com/mail/?view=cm&fs=1&to={Uri.EscapeDataString(email)}");
+    }
+
+    /// <summary>Ouvre Gmail avec un nouveau message adressé à plusieurs destinataires (objet/corps optionnels).</summary>
+    public static void OpenGmailComposeMany(IEnumerable<string> emails, string? subject = null, string? body = null)
+    {
+        var list = emails
+            .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (list.Count == 0)
+            return;
+
+        var to = string.Join(",", list.Select(Uri.EscapeDataString));
+        var url = $"https://mail.google.com/mail/?view=cm&fs=1&to={to}";
+        if (!string.IsNullOrWhiteSpace(subject))
+            url += $"&su={Uri.EscapeDataString(subject)}";
+        if (!string.IsNullOrWhiteSpace(body))
+            url += $"&body={Uri.EscapeDataString(body)}";
+        Open(url);
+    }
+
     /// <summary>Ouvre une URL avec le navigateur sélectionné, sinon avec le navigateur par défaut.</summary>
     public static void Open(string url)
     {

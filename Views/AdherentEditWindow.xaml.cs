@@ -89,7 +89,7 @@ public partial class AdherentEditWindow : Window
 
         Adherent.Prenom = prenom;
         Adherent.Nom = nom;
-        Adherent.Telephone = TelephoneBox.Text.Trim();
+        Adherent.Telephone = Helpers.PhoneFormatter.Format(TelephoneBox.Text);
         Adherent.Email = email;
 
         if (LabelsSection.Visibility == Visibility.Visible)

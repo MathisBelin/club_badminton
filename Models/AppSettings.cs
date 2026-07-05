@@ -31,4 +31,7 @@ public class AppSettings
 
     /// <summary>Adresse du compte Google actuellement connecté (données stockées par compte).</summary>
     public string CurrentAccount { get; set; } = string.Empty;
+
+    /// <summary>Synchronisations automatiques configurées (un Sheet → un libellé chacune).</summary>
+    public List<AutoSyncConfig> AutoSyncs { get; set; } = new();
 }

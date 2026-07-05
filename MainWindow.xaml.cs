@@ -12,7 +12,10 @@ public partial class MainWindow : Window
 
     private readonly ContactsView _contactsView;
     private readonly LabelsView _labelsView;
+    private readonly AssociationView _associationView;
+    private readonly EmailView _emailView;
     private readonly SheetsView _sheetsView;
+    private readonly AutoSyncView _autoSyncView;
     private readonly SettingsView _settingsView;
 
     public MainWindow()
@@ -21,8 +24,18 @@ public partial class MainWindow : Window
 
         _contactsView = new ContactsView(_services);
         _labelsView = new LabelsView(_services);
+        _associationView = new AssociationView(_services);
+        _emailView = new EmailView(_services);
         _sheetsView = new SheetsView(_services);
+        _autoSyncView = new AutoSyncView(_services);
         _settingsView = new SettingsView(_services);
+
+        // Depuis la page Libellés : ouvrir la page Association filtrée sur le libellé cliqué.
+        _labelsView.OpenAssociationRequested += resourceName =>
+        {
+            NavAssociation.IsChecked = true;
+            _associationView.ShowForLabel(resourceName);
+        };
 
         // Sélection initiale : Contacts (le contenu est prêt derrière l'écran de connexion).
         NavContacts.IsChecked = true;
@@ -31,7 +44,69 @@ public partial class MainWindow : Window
         VersionText.Text = version;
         LoginVersionText.Text = $"Club de Badminton — {version}";
 
+        _statusTimer.Tick += (_, _) => OnTick();
+        _statusTimer.Start();
+
         Loaded += async (_, _) => await StartupAsync();
+    }
+
+    private readonly System.Windows.Threading.DispatcherTimer _statusTimer =
+        new() { Interval = TimeSpan.FromSeconds(1) };
+
+    private static bool IsOnline() => System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable();
+
+    /// <summary>Tick 1 s : rafraîchit l'affichage, lance les synchros dues, met à jour la cloche.</summary>
+    private void OnTick()
+    {
+        var appVisible = AppRoot.Visibility == Visibility.Visible;
+        var online = IsOnline();
+        OfflineWarning.Visibility = appVisible && !online ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!appVisible)
+        {
+            NotifArea.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _services.TouchSyncs();               // rafraîchit minuteurs / états (bindings)
+        if (online)
+            _services.RunDueSyncs();           // lance les synchros échues (concurrentes)
+
+        UpdateNotif();
+    }
+
+    /// <summary>Met à jour la pastille de la cloche (nombre de synchros en marche).</summary>
+    private void UpdateNotif()
+    {
+        var count = _services.AutoSyncs.Count(s => s.Enabled);
+        NotifArea.Visibility = Visibility.Visible;
+        NotifBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        NotifCount.Text = count.ToString();
+    }
+
+    /// <summary>Remplit la liste du popup (les minuteurs s'actualisent ensuite par binding).</summary>
+    private void RefreshNotifList()
+    {
+        var running = _services.AutoSyncs.Where(s => s.Enabled).ToList();
+        NotifList.ItemsSource = running;
+        NotifEmpty.Visibility = running.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void NotifButton_Click(object sender, RoutedEventArgs e)
+    {
+        NotifPopup.IsOpen = !NotifPopup.IsOpen;
+        if (NotifPopup.IsOpen)
+            RefreshNotifList();
+    }
+
+    private void Suspend_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Models.AutoSyncConfig c)
+        {
+            _services.StopSync(c);
+            RefreshNotifList();
+            UpdateNotif();
+        }
     }
 
     private async Task CheckForUpdateAsync()
@@ -135,6 +210,11 @@ public partial class MainWindow : Window
         LoginRoot.Visibility = Visibility.Collapsed;
         AppRoot.Visibility = Visibility.Visible;
         await SyncAllAsync();
+
+        // Réarme les synchros activées : elles s'exécutent tout de suite puis toutes les 5 min
+        // (déclenchées par le tick de statut, tant que l'app est visible et en ligne).
+        _services.ArmEnabledSyncs();
+
         _ = CheckForUpdateAsync(); // en arrière-plan, non bloquant
     }
 
@@ -162,7 +242,10 @@ public partial class MainWindow : Window
         {
             "contacts" => _contactsView,
             "labels" => _labelsView,
+            "association" => _associationView,
+            "email" => _emailView,
             "sheets" => _sheetsView,
+            "autosync" => _autoSyncView,
             "settings" => _settingsView,
             _ => null
         };

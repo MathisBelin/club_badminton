@@ -22,12 +22,18 @@ public class AppServices
     /// <summary>Compte Google connecté (données stockées par compte).</summary>
     public string CurrentAccount { get; private set; } = string.Empty;
 
+    /// <summary>Synchronisations automatiques configurées.</summary>
+    public ObservableCollection<AutoSyncConfig> AutoSyncs { get; } = new();
+
     private List<LabelItem>? _labelsCache;
 
     public AppServices()
     {
         Settings = SettingsService.Load();
         BrowserService.SelectedBrowserPath = Settings.BrowserPath;
+
+        foreach (var s in Settings.AutoSyncs)
+            AutoSyncs.Add(s);
 
         BindAccount(Settings.CurrentAccount);
     }
@@ -126,19 +132,37 @@ public class AppServices
 
     public void SaveAdherents() => AdherentRepository.Save(Adherents);
 
+    /// <summary>Met à jour le navigateur choisi (seul paramètre édité par l'écran Paramètres).</summary>
+    public void UpdateBrowser(string browserPath)
+    {
+        Settings.BrowserPath = browserPath ?? string.Empty;
+        SettingsService.Save(Settings);
+        BrowserService.SelectedBrowserPath = Settings.BrowserPath;
+    }
+
     /// <summary>
     /// Liste des libellés, mise en cache. Ne rappelle l'API que si le cache est vide
     /// ou si <paramref name="forceRefresh"/> est demandé (après création/renommage/suppression).
     /// </summary>
+    /// <summary>Déclenché quand la liste des libellés (cache) est (re)chargée.</summary>
+    public event Action? LabelsChanged;
+
     public async Task<IReadOnlyList<LabelItem>> GetLabelsAsync(bool forceRefresh = false)
     {
         if (_labelsCache == null || forceRefresh)
+        {
             _labelsCache = await Contacts.ListLabelsAsync();
-        return _labelsCache;
+            LabelsChanged?.Invoke();
+        }
+        return OrderLabels(_labelsCache);
     }
 
-    /// <summary>Libellés déjà en cache (ou liste vide), sans appel réseau.</summary>
-    public IReadOnlyList<LabelItem> CachedLabels => _labelsCache ?? new List<LabelItem>();
+    /// <summary>Libellés déjà en cache (ou liste vide), triés par ordre alphabétique, sans appel réseau.</summary>
+    public IReadOnlyList<LabelItem> CachedLabels => OrderLabels(_labelsCache ?? new List<LabelItem>());
+
+    /// <summary>Trie les libellés par ordre alphabétique inverse (Z→A), utilisé pour toutes les listes déroulantes.</summary>
+    private static IReadOnlyList<LabelItem> OrderLabels(IReadOnlyList<LabelItem> src)
+        => src.OrderByDescending(l => l.Nom, StringComparer.CurrentCultureIgnoreCase).ToList();
 
     /// <summary>
     /// Synchronisation deux sens avec Google Contacts :
@@ -219,6 +243,338 @@ public class AppServices
             SaveAdherents();
     }
 
+    /// <summary>Intervalle entre deux exécutions d'une même synchro.</summary>
+    public static readonly TimeSpan AutoSyncInterval = TimeSpan.FromMinutes(5);
+
+    // ---- Gestion des synchros --------------------------------------------
+
+    /// <summary>Persiste la liste des synchros dans settings.json.</summary>
+    public void SaveSyncs()
+    {
+        Settings.AutoSyncs = AutoSyncs.ToList();
+        SettingsService.Save(Settings);
+    }
+
+    /// <summary>Ajoute (ou remplace, par Id) une synchro puis sauvegarde.</summary>
+    public void AddOrUpdateSync(AutoSyncConfig config)
+    {
+        var existing = AutoSyncs.FirstOrDefault(s => s.Id == config.Id);
+        if (existing != null)
+            AutoSyncs[AutoSyncs.IndexOf(existing)] = config;
+        else
+            AutoSyncs.Add(config);
+        SaveSyncs();
+    }
+
+    public void DeleteSync(AutoSyncConfig config)
+    {
+        config.Enabled = false;
+        AutoSyncs.Remove(config);
+        SaveSyncs();
+    }
+
+    /// <summary>Vrai si un libellé est déjà ciblé par une autre synchro (unicité).</summary>
+    public bool IsLabelInUse(string labelResourceName, Guid exceptId)
+        => AutoSyncs.Any(s => s.Id != exceptId
+            && string.Equals(s.LabelResourceName, labelResourceName, StringComparison.Ordinal));
+
+    public void StartSync(AutoSyncConfig config)
+    {
+        config.Enabled = true;
+        config.NextRun = DateTime.Now; // exécution immédiate
+        SaveSyncs();
+    }
+
+    public void StopSync(AutoSyncConfig config)
+    {
+        config.Enabled = false;
+        config.NextRun = null;
+        SaveSyncs();
+    }
+
+    /// <summary>Réarme les synchros activées au démarrage (exécution immédiate).</summary>
+    public void ArmEnabledSyncs()
+    {
+        foreach (var s in AutoSyncs.Where(s => s.Enabled))
+            s.NextRun = DateTime.Now;
+    }
+
+    /// <summary>Rafraîchit l'état affiché (minuteur) de toutes les synchros.</summary>
+    public void TouchSyncs()
+    {
+        foreach (var s in AutoSyncs)
+            s.Touch();
+    }
+
+    /// <summary>Lance les synchros dues (activées, non en cours, échéance atteinte). Concurrent.</summary>
+    public void RunDueSyncs()
+    {
+        var now = DateTime.Now;
+        foreach (var s in AutoSyncs)
+            if (s.Enabled && !s.IsImporting && (s.NextRun == null || s.NextRun <= now))
+                _ = RunSyncNowAsync(s);
+    }
+
+    /// <summary>Exécute une synchro immédiatement (silencieuse). Ne fait rien si déjà en cours.</summary>
+    public async Task RunSyncNowAsync(AutoSyncConfig config)
+    {
+        if (config.IsImporting)
+            return;
+
+        config.Progress = 0;
+        config.IsImporting = true;
+        try
+        {
+            await ImportConfigAsync(config);
+        }
+        catch
+        {
+            // Silencieux : repris au prochain cycle.
+        }
+        finally
+        {
+            config.IsImporting = false;
+            config.Progress = 0;
+            config.NextRun = DateTime.Now + AutoSyncInterval;
+        }
+    }
+
+    /// <summary>
+    /// Importe les adhérents d'un Sheet vers son libellé cible : ajout / mise à jour par e-mail,
+    /// association au libellé, et dissociation des membres absents du fichier.
+    /// </summary>
+    private async Task<(int Added, int Updated)> ImportConfigAsync(AutoSyncConfig config)
+    {
+        var id = ExtractSheetId(config.SheetUrl);
+        if (id == null)
+            return (0, 0);
+
+        var rows = await Sheets.ReadRowsAsync(id, BuildDataRange(config.StartRow, config.EndRow));
+        var parsed = CsvContactImporter.BuildFromColumns(rows,
+                CsvContactImporter.ColIndex(config.ColNom),
+                CsvContactImporter.ColIndex(config.ColPrenom),
+                CsvContactImporter.ColIndex(config.ColTel),
+                CsvContactImporter.ColIndex(config.ColEmail))
+            .Where(c => EmailValidator.IsValid(c.Email)).ToList();
+
+        // Adhérent local correspondant à chaque ligne du fichier (existant fusionné ou nouveau).
+        var sheetContacts = new List<Adherent>();
+        int added = 0, updated = 0;
+        foreach (var p in parsed)
+        {
+            var existing = Adherents.FirstOrDefault(a =>
+                string.Equals(a.Email, p.Email, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                if (MergeFields(existing, p)) updated++;
+                sheetContacts.Add(existing);
+            }
+            else
+            {
+                Adherents.Add(p);
+                added++;
+                sheetContacts.Add(p);
+            }
+        }
+
+        if (added > 0 || updated > 0)
+            SaveAdherents();
+
+        config.Progress = 10;
+
+        // État actuel côté Google pour ne pousser que les vraies différences de champs.
+        Dictionary<string, GoogleContact> googleByEmail;
+        try
+        {
+            googleByEmail = (await Contacts.ListContactsAsync())
+                .Where(c => !string.IsNullOrWhiteSpace(c.Email))
+                .GroupBy(c => c.Email, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+        catch (GoogleSyncException)
+        {
+            googleByEmail = new Dictionary<string, GoogleContact>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var pushed = false;
+        var pushIndex = 0;
+        var pushTotal = Math.Max(1, sheetContacts.Count);
+        foreach (var a in sheetContacts)
+        {
+            try
+            {
+                googleByEmail.TryGetValue(a.Email, out var gc);
+
+                if (string.IsNullOrEmpty(a.GoogleResourceName))
+                {
+                    a.GoogleResourceName = gc?.ResourceName ?? await Contacts.EnsureContactResourceAsync(a);
+                    pushed = true;
+                }
+
+                if (gc == null || FieldsDiffer(a, gc))
+                {
+                    await Contacts.UpdateContactAsync(a.GoogleResourceName, a);
+                    pushed = true;
+                }
+            }
+            catch (GoogleSyncException)
+            {
+                // Silencieux : repris au prochain cycle.
+            }
+
+            // La poussée vers Google est le gros du travail : 10 % → 85 %.
+            pushIndex++;
+            config.Progress = 10 + (int)(pushIndex * 75.0 / pushTotal);
+        }
+        if (pushed)
+            SaveAdherents();
+
+        config.Progress = 90;
+
+        // Association au libellé cible (unique) : ajout des manquants, retrait des absents.
+        var group = config.LabelResourceName;
+        if (!string.IsNullOrWhiteSpace(group))
+        {
+            var sheetEmails = new HashSet<string>(parsed.Select(p => p.Email), StringComparer.OrdinalIgnoreCase);
+            var byEmail = Adherents
+                .Where(a => !string.IsNullOrWhiteSpace(a.Email) && sheetEmails.Contains(a.Email))
+                .GroupBy(a => a.Email, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            List<(string ResourceName, string Email)>? members = null;
+            try { members = await Contacts.GetLabelMembersAsync(group); }
+            catch (GoogleSyncException) { /* on retentera au prochain cycle */ }
+
+            if (members != null)
+            {
+                var alreadyIn = new HashSet<string>(members.Select(m => m.Email), StringComparer.OrdinalIgnoreCase);
+                var resourceResolved = false;
+
+                foreach (var (email, a) in byEmail)
+                {
+                    if (alreadyIn.Contains(email))
+                        continue;
+                    try
+                    {
+                        if (string.IsNullOrEmpty(a.GoogleResourceName))
+                        {
+                            a.GoogleResourceName = await Contacts.EnsureContactResourceAsync(a);
+                            resourceResolved = true;
+                        }
+                        await Contacts.SetMembershipAsync(a.GoogleResourceName, group, add: true);
+                    }
+                    catch (GoogleSyncException) { /* repris au prochain cycle */ }
+                }
+
+                foreach (var (resourceName, email) in members)
+                {
+                    if (sheetEmails.Contains(email))
+                        continue;
+                    try { await Contacts.SetMembershipAsync(resourceName, group, add: false); }
+                    catch (GoogleSyncException) { /* repris au prochain cycle */ }
+                }
+
+                if (resourceResolved)
+                    SaveAdherents();
+            }
+        }
+
+        config.Progress = 100;
+        return (added, updated);
+    }
+
+    private static bool MergeFields(Adherent target, Adherent source)
+    {
+        var changed = false;
+        if (!string.IsNullOrWhiteSpace(source.Nom) && target.Nom != source.Nom) { target.Nom = source.Nom; changed = true; }
+        if (!string.IsNullOrWhiteSpace(source.Prenom) && target.Prenom != source.Prenom) { target.Prenom = source.Prenom; changed = true; }
+        if (!string.IsNullOrWhiteSpace(source.Telephone) && target.Telephone != source.Telephone) { target.Telephone = source.Telephone; changed = true; }
+        return changed;
+    }
+
+    /// <summary>Construit la plage A→Z pour les lignes de données configurées (début → fin).</summary>
+    private static string BuildDataRange(int startRow, int endRow)
+    {
+        var start = startRow > 0 ? startRow : 1;
+        return endRow >= start ? $"A{start}:Z{endRow}" : $"A{start}:Z";
+    }
+
+    /// <summary>Colonnes détectées automatiquement (lettres ; null si non trouvée).</summary>
+    public sealed record DetectedColumns(string? Nom, string? Prenom, string? Tel, string? Email);
+
+    /// <summary>
+    /// Détecte automatiquement les colonnes d'un Sheet par leurs en-têtes (lecture depuis la 1re
+    /// ligne pour inclure l'en-tête). Renvoie les lettres trouvées (null si non détectée).
+    /// </summary>
+    public async Task<DetectedColumns> DetectColumnsAsync(string sheetUrl, int endRow)
+    {
+        var id = ExtractSheetId(sheetUrl);
+        if (id == null)
+            return new DetectedColumns(null, null, null, null);
+
+        var rows = await Sheets.ReadRowsAsync(id, endRow > 0 ? $"A1:Z{endRow}" : "A1:Z");
+
+        var mapping = CsvContactImporter.DetectColumns(rows);
+        if (mapping == null)
+            return new DetectedColumns(null, null, null, null);
+
+        string? L(string key) => mapping.Columns.TryGetValue(key, out var i) ? CsvContactImporter.ColumnLetter(i) : null;
+        return new DetectedColumns(L("nom"), L("prenom"), L("tel"), L("email"));
+    }
+
+    /// <summary>Résultat d'un test de colonnes : validé ou non + message affichable.</summary>
+    public sealed record ColumnCheck(bool Ok, string Message);
+
+    /// <summary>
+    /// Lit les lignes d'un Sheet avec les colonnes indiquées et vérifie que les 4 informations
+    /// (Nom / Prénom / Téléphone / E-mail) ressortent bien. Renvoie un statut + un message.
+    /// </summary>
+    public async Task<ColumnCheck> CheckColumnsAsync(
+        string sheetUrl, int startRow, int endRow,
+        string colNom, string colPrenom, string colTel, string colEmail)
+    {
+        var id = ExtractSheetId(sheetUrl);
+        if (id == null)
+            return new ColumnCheck(false, "Lien du Google Sheet invalide ou manquant.");
+
+        List<string[]> rows;
+        try
+        {
+            rows = await Sheets.ReadRowsAsync(id, BuildDataRange(startRow, endRow));
+        }
+        catch (GoogleSyncException ex)
+        {
+            return new ColumnCheck(false, ex.Message);
+        }
+
+        var result = CsvContactImporter.CheckColumns(rows, colNom, colPrenom, colTel, colEmail);
+        var message = CsvContactImporter.BuildCheckMessage(result, colNom, colPrenom, colTel, colEmail);
+        return new ColumnCheck(result.Ok, message);
+    }
+
+    /// <summary>Vrai si le contact Google diffère de l'adhérent (nom, prénom ou téléphone).</summary>
+    private static bool FieldsDiffer(Adherent a, GoogleContact gc)
+    {
+        static string Digits(string? s) => new string((s ?? string.Empty).Where(char.IsDigit).ToArray());
+        return !string.Equals(a.Nom, gc.Nom, StringComparison.Ordinal)
+            || !string.Equals(a.Prenom, gc.Prenom, StringComparison.Ordinal)
+            || Digits(a.Telephone) != Digits(gc.Telephone);
+    }
+
+    /// <summary>Extrait l'ID d'un Google Sheet depuis une URL (…/spreadsheets/d/&lt;id&gt;/…).</summary>
+    public static string? ExtractSheetId(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+        var m = System.Text.RegularExpressions.Regex.Match(url, @"/spreadsheets/d/([a-zA-Z0-9\-_]+)");
+        if (m.Success)
+            return m.Groups[1].Value;
+        // Peut-être un ID collé directement.
+        return System.Text.RegularExpressions.Regex.IsMatch(url.Trim(), @"^[a-zA-Z0-9\-_]{20,}$")
+            ? url.Trim()
+            : null;
+    }
+
     private static bool ApplyGoogleToLocal(Adherent a, GoogleContact gc)
     {
         var changed = false;
@@ -229,25 +585,4 @@ public class AppServices
         return changed;
     }
 
-    /// <summary>
-    /// Applique de nouveaux paramètres : sauvegarde, met à jour le navigateur,
-    /// et recharge les adhérents si le chemin du fichier a changé.
-    /// </summary>
-    public void ApplySettings(AppSettings newSettings)
-    {
-        var oldPath = AdherentRepository.Path;
-        Settings = newSettings;
-        SettingsService.Save(Settings);
-        BrowserService.SelectedBrowserPath = Settings.BrowserPath;
-
-        // Rebind (le chemin JSON personnalisé a pu changer).
-        var newPath = string.IsNullOrWhiteSpace(Settings.AdherentsJsonPath)
-            ? AppPaths.AdherentsFileFor(CurrentAccount)
-            : Settings.AdherentsJsonPath;
-        if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
-        {
-            AdherentRepository = new AdherentRepository(newPath);
-            ReloadAdherents();
-        }
-    }
 }

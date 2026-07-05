@@ -37,8 +37,10 @@
             </Grid>
         </Border>
 
+        <Grid>
         <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
-                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single">
+                  CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single"
+                  MouseDoubleClick="Grid_MouseDoubleClick">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="42" CanUserResize="False">
                     <DataGridTemplateColumn.Header>
@@ -54,19 +56,25 @@
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Libellé" Binding="{Binding Nom}" Width="*" />
                 <DataGridTextColumn Header="Membres" Binding="{Binding NombreMembres}" Width="100" />
-                <DataGridTemplateColumn Header="Actions" Width="120" CanUserResize="False">
+                <DataGridTemplateColumn Header="Actions" Width="300" CanUserResize="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <Button Style="{StaticResource RowButton}" Content="✏"
-                                        ToolTip="Renommer" Click="Renommer_Click" />
-                                <Button Style="{StaticResource RowButton}" Content="🗑"
-                                        ToolTip="Supprimer" Click="Supprimer_Click" />
+                                <Button Style="{StaticResource RowBlueButton}" Content="👁 Voir"
+                                        ToolTip="Voir les membres" Click="Voir_Click" />
+                                <Button Style="{StaticResource RowModifyButton}" Content="✏ Renommer"
+                                        Click="Renommer_Click" />
+                                <Button Style="{StaticResource RowDeleteButton}" Content="🗑 Supprimer"
+                                        Click="Supprimer_Click" />
                             </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
+        <TextBlock x:Name="EmptyResults" Visibility="Collapsed" IsHitTestVisible="False"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Margin="0,40,0,0" Foreground="#999999" FontSize="13" />
+        </Grid>
     </DockPanel>
 </UserControl>

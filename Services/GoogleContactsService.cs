@@ -207,7 +207,7 @@ public class GoogleContactsService
                            Nom = g.Name,
                            NombreMembres = g.MemberCount ?? 0
                        })
-                       .OrderBy(l => l.Nom, StringComparer.CurrentCultureIgnoreCase)
+                       .OrderByDescending(l => l.Nom, StringComparer.CurrentCultureIgnoreCase)
                        .ToList()
                    ?? new List<LabelItem>();
         }
@@ -394,6 +394,46 @@ public class GoogleContactsService
         {
             throw GoogleErrors.Translate(ex, "Impossible de récupérer les contacts Google.");
         }
+    }
+
+    /// <summary>Renvoie les membres d'un libellé sous forme (ressource, e-mail).</summary>
+    public async Task<List<(string ResourceName, string Email)>> GetLabelMembersAsync(
+        string groupResourceName, CancellationToken ct = default)
+    {
+        await EnsureAuthenticatedAsync(ct);
+        try
+        {
+            var getGroup = _service!.ContactGroups.Get(groupResourceName);
+            getGroup.MaxMembers = 10000;
+            var group = await getGroup.ExecuteAsync(ct);
+
+            var result = new List<(string, string)>();
+            var members = group.MemberResourceNames;
+            if (members == null || members.Count == 0)
+                return result;
+
+            const int chunkSize = 200;
+            for (var i = 0; i < members.Count; i += chunkSize)
+            {
+                var chunk = members.Skip(i).Take(chunkSize).ToList();
+                var request = _service.People.GetBatchGet();
+                request.ResourceNames = new Repeatable<string>(chunk);
+                request.PersonFields = "emailAddresses";
+                var response = await request.ExecuteAsync(ct);
+
+                if (response.Responses == null) continue;
+                foreach (var r in response.Responses)
+                {
+                    var rn = r.Person?.ResourceName ?? r.RequestedResourceName;
+                    var email = r.Person?.EmailAddresses?.FirstOrDefault(e => !string.IsNullOrEmpty(e.Value))?.Value;
+                    if (!string.IsNullOrEmpty(rn) && !string.IsNullOrEmpty(email))
+                        result.Add((rn, email));
+                }
+            }
+            return result;
+        }
+        catch (GoogleSyncException) { throw; }
+        catch (Exception ex) { throw GoogleErrors.Translate(ex, "Impossible de lire les membres du libellé."); }
     }
 
     /// <summary>Renvoie l'ensemble des e-mails des contacts membres d'un libellé.</summary>

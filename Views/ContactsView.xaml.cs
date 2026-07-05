@@ -16,9 +16,11 @@ public partial class ContactsView : UserControl, IActivableView
     private ICollectionView _view = null!;
 
     // Filtre par libellé (recherche avancée).
+    private const string NoLabelTag = "__none__";
     private HashSet<string>? _labelFilterEmails;
+    private bool _filterNoLabel;
+    private HashSet<string>? _allLabelEmails; // union des membres de tous les libellés (pour « sans libellé »)
     private readonly Dictionary<string, HashSet<string>> _labelMemberCache = new(StringComparer.Ordinal);
-    private bool _labelFilterLoaded;
 
     public ContactsView(AppServices services)
     {
@@ -33,6 +35,9 @@ public partial class ContactsView : UserControl, IActivableView
         LabelFilter.Placeholder = "Choisir des libellés";
         LabelFilter.SelectionChanged += LabelFilter_SelectionChanged;
 
+        // Mise à jour en direct du filtre quand les libellés changent (création/suppression).
+        _services.LabelsChanged += OnLabelsChanged;
+
         foreach (var a in _services.Adherents)
             a.PropertyChanged += Adherent_PropertyChanged;
         _services.Adherents.CollectionChanged += Adherents_CollectionChanged;
@@ -45,19 +50,18 @@ public partial class ContactsView : UserControl, IActivableView
         _view.Refresh();
         UpdateCount();
         UpdateBulkBar();
+        _ = PopulateLabelFilterAsync();
     }
 
     /// <summary>Réinitialise l'affichage et les caches (changement de compte).</summary>
     public void ResetView()
     {
         SearchBox.Text = string.Empty;
-        AdvancedToggle.IsChecked = false;
-        AdvancedPanel.Visibility = Visibility.Collapsed;
-
         _labelFilterEmails = null;
+        _filterNoLabel = false;
+        _allLabelEmails = null;
         _labelMemberCache.Clear();
-        _labelFilterLoaded = false;
-        LabelFilter.SetOptions(Enumerable.Empty<CheckOption>());
+        LabelFilter.ClearSelection();
 
         _view?.Refresh();
         UpdateCount();
@@ -86,9 +90,16 @@ public partial class ContactsView : UserControl, IActivableView
             return false;
 
         // Filtre par libellé (recherche avancée).
-        if (_labelFilterEmails != null &&
-            (string.IsNullOrWhiteSpace(a.Email) || !_labelFilterEmails.Contains(a.Email)))
-            return false;
+        if (_labelFilterEmails != null || _filterNoLabel)
+        {
+            var inSelectedLabel = _labelFilterEmails != null &&
+                !string.IsNullOrWhiteSpace(a.Email) && _labelFilterEmails.Contains(a.Email);
+            var isWithoutLabel = _filterNoLabel &&
+                (string.IsNullOrWhiteSpace(a.Email) ||
+                 (_allLabelEmails != null && !_allLabelEmails.Contains(a.Email)));
+            if (!inSelectedLabel && !isWithoutLabel)
+                return false;
+        }
 
         var term = SearchBox.Text?.Trim();
         if (string.IsNullOrEmpty(term))
@@ -99,54 +110,113 @@ public partial class ContactsView : UserControl, IActivableView
         bool Contains(string? v) => v != null && v.Contains(term, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => _view?.Refresh();
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        _view?.Refresh();
+        UpdateCount();
+    }
+
+    private void Email_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as System.Windows.Documents.Hyperlink)?.DataContext is Adherent a)
+            BrowserService.OpenGmailCompose(a.Email);
+    }
 
     // ---- Recherche avancée : filtre par libellé --------------------------
 
-    private async void Advanced_Toggled(object sender, RoutedEventArgs e)
+    /// <summary>Charge/rafraîchit les options du filtre par libellé.</summary>
+    private async Task PopulateLabelFilterAsync()
     {
-        var open = AdvancedToggle.IsChecked == true;
-        AdvancedPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-
-        if (open && !_labelFilterLoaded)
+        try
         {
-            _labelFilterLoaded = true;
-            try
-            {
-                var labels = await _services.GetLabelsAsync();
-                LabelFilter.SetOptions(labels.Select(l => new CheckOption { Text = l.Nom, Tag = l.ResourceName }));
-            }
-            catch (GoogleSyncException)
-            {
-                LabelFilter.SetEmptyText("Libellés indisponibles (hors ligne ?).");
-            }
+            var labels = await _services.GetLabelsAsync();
+            RefreshLabelFilterOptions(labels);
+        }
+        catch (GoogleSyncException)
+        {
+            LabelFilter.SetEmptyText("Libellés indisponibles (hors ligne ?).");
+        }
+    }
+
+    private void OnLabelsChanged()
+    {
+        _allLabelEmails = null; // les libellés ont changé : union à recalculer
+        RefreshLabelFilterOptions(_services.CachedLabels);
+    }
+
+    private void RefreshLabelFilterOptions(IEnumerable<LabelItem> labels)
+    {
+        var list = labels.ToList();
+        var selected = LabelFilter.SelectedTags.OfType<string>().ToHashSet(StringComparer.Ordinal);
+
+        // Option « sans libellé » + libellés (un supprimé disparaît, un nouveau apparaît),
+        // en conservant les sélections encore valides.
+        var options = new List<CheckOption>
+        {
+            new() { Text = "(Sans libellé)", Tag = NoLabelTag, IsSelected = _filterNoLabel }
+        };
+        options.AddRange(list.Select(l => new CheckOption
+        {
+            Text = l.Nom,
+            Tag = l.ResourceName,
+            IsSelected = selected.Contains(l.ResourceName)
+        }));
+        LabelFilter.SetOptions(options);
+
+        // Nettoie le cache d'appartenance des libellés disparus.
+        var valid = list.Select(l => l.ResourceName).ToHashSet(StringComparer.Ordinal);
+        foreach (var key in _labelMemberCache.Keys.ToList())
+            if (!valid.Contains(key))
+                _labelMemberCache.Remove(key);
+
+        // Si un libellé actuellement filtré a été supprimé, on réinitialise le filtre.
+        if (_labelFilterEmails != null && selected.Any(s => !valid.Contains(s)))
+        {
+            _labelFilterEmails = null;
+            _view.Refresh();
         }
     }
 
     private async void LabelFilter_SelectionChanged(object? sender, EventArgs e)
     {
         var selected = LabelFilter.SelectedTags.OfType<string>().ToList();
-        if (selected.Count == 0)
+        ClearLabelBtn.Visibility = selected.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        _filterNoLabel = selected.Contains(NoLabelTag);
+        var realLabels = selected.Where(t => t != NoLabelTag).ToList();
+
+        if (realLabels.Count == 0 && !_filterNoLabel)
         {
             _labelFilterEmails = null;
             _view.Refresh();
+            UpdateCount();
             return;
         }
 
         try
         {
             Cursor = System.Windows.Input.Cursors.Wait;
-            var emails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var res in selected)
+
+            if (realLabels.Count > 0)
             {
-                if (!_labelMemberCache.TryGetValue(res, out var set))
-                {
-                    set = await _services.Contacts.GetLabelMemberEmailsAsync(res);
-                    _labelMemberCache[res] = set;
-                }
-                emails.UnionWith(set);
+                var emails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var res in realLabels)
+                    emails.UnionWith(await MemberEmailsAsync(res));
+                _labelFilterEmails = emails;
             }
-            _labelFilterEmails = emails;
+            else
+            {
+                _labelFilterEmails = null;
+            }
+
+            // « Sans libellé » nécessite l'union des membres de TOUS les libellés.
+            if (_filterNoLabel && _allLabelEmails == null)
+            {
+                var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var l in _services.CachedLabels)
+                    all.UnionWith(await MemberEmailsAsync(l.ResourceName));
+                _allLabelEmails = all;
+            }
         }
         catch (GoogleSyncException ex)
         {
@@ -159,11 +229,42 @@ public partial class ContactsView : UserControl, IActivableView
         }
 
         _view.Refresh();
+        UpdateCount();
+    }
+
+    private async Task<HashSet<string>> MemberEmailsAsync(string resourceName)
+    {
+        if (!_labelMemberCache.TryGetValue(resourceName, out var set))
+        {
+            set = await _services.Contacts.GetLabelMemberEmailsAsync(resourceName);
+            _labelMemberCache[resourceName] = set;
+        }
+        return set;
     }
 
     private void ResetFilter_Click(object sender, RoutedEventArgs e) => LabelFilter.ClearSelection();
 
-    private void UpdateCount() => CountText.Text = $"{_services.Adherents.Count} adhérent(s)";
+    private void UpdateCount()
+    {
+        var total = _services.Adherents.Count;
+        var shown = _view?.Cast<object>().Count() ?? total;
+        CountText.Text = shown == total
+            ? $"{total} adhérent(s)"
+            : $"{shown} sur {total} adhérent(s)";
+
+        if (shown > 0)
+            EmptyResults.Visibility = Visibility.Collapsed;
+        else
+        {
+            EmptyResults.Text = total == 0
+                ? "Aucun adhérent pour le moment."
+                : "Aucun résultat pour cette recherche.";
+            EmptyResults.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>Adhérents actuellement affichés (après recherche + filtre par libellé).</summary>
+    private List<Adherent> FilteredAdherents() => _view.Cast<Adherent>().ToList();
 
     // ---- Suivi de la sélection (cases à cocher) ---------------------------
 
@@ -200,15 +301,18 @@ public partial class ContactsView : UserControl, IActivableView
             Animations.FadeOutCollapse(BulkBar);
         }
 
-        SelectAllBox.IsChecked = count == 0 ? false
-            : count == _services.Adherents.Count ? true
+        var filtered = FilteredAdherents();
+        var filteredSel = filtered.Count(a => a.IsSelected);
+        SelectAllBox.IsChecked = filteredSel == 0 ? false
+            : filteredSel == filtered.Count && filtered.Count > 0 ? true
             : null;
     }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e)
     {
+        // On (dé)sélectionne uniquement les adhérents actuellement affichés (filtrés).
         var check = SelectAllBox.IsChecked == true;
-        foreach (var a in _services.Adherents)
+        foreach (var a in FilteredAdherents())
             a.IsSelected = check;
     }
 
@@ -229,38 +333,59 @@ public partial class ContactsView : UserControl, IActivableView
             return;
 
         var labelResources = win.SelectedLabelResourceNames;
+        var corrections = win.Corrections;
 
-        // Dédoublonnage par e-mail (contacts déjà présents + doublons dans la source).
-        var existingEmails = new HashSet<string>(
-            _services.Adherents.Where(a => !string.IsNullOrWhiteSpace(a.Email)).Select(a => a.Email),
-            StringComparer.OrdinalIgnoreCase);
+        var toPush = new List<Adherent>();   // nouveaux + modifiés → à envoyer à Google
+        int added = 0, updated = 0, unchanged = 0;
 
-        var newContacts = new List<Adherent>();
-        var skipped = 0;
         foreach (var p in win.ParsedContacts)
         {
-            if (!existingEmails.Add(p.Email))
+            // 1. E-mail déjà présent → on met à jour les infos (on garde l'e-mail).
+            var existing = FindByEmail(p.Email);
+            if (existing != null)
             {
-                skipped++;
+                if (ApplyImportedFields(existing, p)) { updated++; toPush.Add(existing); }
+                else unchanged++;
                 continue;
             }
+
+            // 2. E-mail corrigé : si l'e-mail d'origine (mal écrit) existe déjà localement,
+            //    on corrige cet e-mail au lieu de créer un doublon.
+            if (corrections.TryGetValue(p.Email, out var original))
+            {
+                var origContact = FindByEmail(original);
+                if (origContact != null)
+                {
+                    origContact.Email = p.Email;      // remplace l'e-mail par sa correction
+                    ApplyImportedFields(origContact, p);
+                    updated++;
+                    toPush.Add(origContact);
+                    continue;
+                }
+            }
+
+            // 3. Nouveau contact.
             _services.Adherents.Add(p);
-            newContacts.Add(p);
+            added++;
+            toPush.Add(p);
         }
 
-        if (newContacts.Count > 0)
-            _services.SaveAdherents();
+        _services.SaveAdherents();
         _view.Refresh();
         UpdateCount();
 
-        // Envoi vers Google + association aux libellés cibles (avec barre de progression).
+        // Envoi vers Google (création ou mise à jour) + libellés cibles.
         BatchResult push = default;
-        if (newContacts.Count > 0)
+        if (toPush.Count > 0)
         {
-            push = await ProgressRunner.RunAsync(owner, "Import des contacts…", newContacts,
+            push = await ProgressRunner.RunAsync(owner, "Import des contacts…", toPush,
                 async a =>
                 {
-                    a.GoogleResourceName = await _services.Contacts.EnsureContactResourceAsync(a);
+                    if (string.IsNullOrEmpty(a.GoogleResourceName))
+                        a.GoogleResourceName = await _services.Contacts.EnsureContactResourceAsync(a);
+                    else
+                        await _services.Contacts.UpdateContactAsync(a.GoogleResourceName, a);
+
                     foreach (var groupResource in labelResources)
                         await _services.Contacts.SetMembershipAsync(a.GoogleResourceName, groupResource, add: true);
                 });
@@ -274,17 +399,36 @@ public partial class ContactsView : UserControl, IActivableView
             : string.Empty;
 
         MessageBox.Show(owner,
-            $"Import terminé :\n• {newContacts.Count} contact(s) importé(s)\n• {skipped} ignoré(s) (e-mail déjà présent){pushNote}",
+            $"Import terminé :\n• {added} ajouté(s)\n• {updated} mis à jour\n• {unchanged} inchangé(s){pushNote}",
             "Import", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private Adherent? FindByEmail(string email)
+        => string.IsNullOrWhiteSpace(email)
+            ? null
+            : _services.Adherents.FirstOrDefault(a =>
+                string.Equals(a.Email, email, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Met à jour nom/prénom/téléphone depuis l'import (sans écraser par du vide). Renvoie true si modifié.</summary>
+    private static bool ApplyImportedFields(Adherent target, Adherent source)
+    {
+        var changed = false;
+        if (!string.IsNullOrWhiteSpace(source.Nom) && !string.Equals(target.Nom, source.Nom, StringComparison.Ordinal))
+        { target.Nom = source.Nom; changed = true; }
+        if (!string.IsNullOrWhiteSpace(source.Prenom) && !string.Equals(target.Prenom, source.Prenom, StringComparison.Ordinal))
+        { target.Prenom = source.Prenom; changed = true; }
+        if (!string.IsNullOrWhiteSpace(source.Telephone) && !string.Equals(target.Telephone, source.Telephone, StringComparison.Ordinal))
+        { target.Telephone = source.Telephone; changed = true; }
+        return changed;
     }
 
     private void Exporter_Click(object sender, RoutedEventArgs e)
     {
         var owner = Window.GetWindow(this)!;
 
-        // Si des contacts sont cochés, on exporte la sélection ; sinon tous.
+        // Si des contacts sont cochés, on exporte la sélection ; sinon le filtrage affiché.
         var selected = _services.Adherents.Where(a => a.IsSelected).ToList();
-        var toExport = selected.Count > 0 ? selected : _services.Adherents.ToList();
+        var toExport = selected.Count > 0 ? selected : FilteredAdherents();
 
         if (toExport.Count == 0)
         {
@@ -318,23 +462,6 @@ public partial class ContactsView : UserControl, IActivableView
         MessageBox.Show(owner,
             $"{toExport.Count} contact(s) {portee} exporté(s) vers :\n{dlg.FileName}",
             "Export", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    private void Associer_Click(object sender, RoutedEventArgs e)
-    {
-        if (_services.Adherents.Count == 0)
-        {
-            MessageBox.Show(Window.GetWindow(this),
-                "Aucun adhérent à associer. Créez des contacts d'abord.", "Association",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var modal = new AssociateContactsWindow(_services.Contacts, _services.Adherents)
-        {
-            Owner = Window.GetWindow(this)
-        };
-        modal.ShowDialog();
     }
 
     private async void Ajouter_Click(object sender, RoutedEventArgs e)
@@ -438,13 +565,11 @@ public partial class ContactsView : UserControl, IActivableView
         if ((sender as FrameworkElement)?.DataContext is not Adherent a)
             return;
 
-        var confirm = MessageBox.Show(Window.GetWindow(this),
-            $"Supprimer {a.Prenom} {a.Nom} ?", "Confirmation",
-            MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        var owner = Window.GetWindow(this)!;
+        if (!ConfirmWindow.Ask(owner, "Supprimer le contact",
+                $"Supprimer définitivement {a.Prenom} {a.Nom} ?\nLe contact sera aussi retiré de Google Contacts."))
             return;
 
-        var owner = Window.GetWindow(this)!;
         var result = await ProgressRunner.RunBusyAsync(owner, "Suppression du contact…",
             () => DeleteContactCoreAsync(a));
         ReportSingle(owner, result);
@@ -465,13 +590,11 @@ public partial class ContactsView : UserControl, IActivableView
         if (selected.Count == 0)
             return;
 
-        var confirm = MessageBox.Show(Window.GetWindow(this),
-            $"Supprimer les {selected.Count} contact(s) sélectionné(s) ?",
-            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        var owner = Window.GetWindow(this)!;
+        if (!ConfirmWindow.Ask(owner, "Supprimer les contacts",
+                $"Supprimer définitivement les {selected.Count} contact(s) sélectionné(s) ?\nIls seront aussi retirés de Google Contacts."))
             return;
 
-        var owner = Window.GetWindow(this)!;
         var result = await ProgressRunner.RunAsync(
             owner, "Suppression des contacts…", selected, DeleteContactCoreAsync);
 

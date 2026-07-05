@@ -9,16 +9,19 @@ namespace BadmintonClub.Services;
 /// </summary>
 public static class ExcelContactImporter
 {
-    public static List<Adherent> Parse(string path)
+    public static List<Adherent> Parse(string path) => CsvContactImporter.FromRows(ReadRows(path));
+
+    /// <summary>Lit toutes les lignes utilisées de la 1re feuille en tableaux de cellules.</summary>
+    public static List<string[]> ReadRows(string path)
     {
         using var workbook = new XLWorkbook(path);
         var worksheet = workbook.Worksheets.First();
 
+        var rows = new List<string[]>();
         var lastColumn = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
         if (lastColumn == 0)
-            return new List<Adherent>();
+            return rows;
 
-        var rows = new List<string[]>();
         foreach (var row in worksheet.RowsUsed())
         {
             var cells = new string[lastColumn];
@@ -27,6 +30,6 @@ public static class ExcelContactImporter
             rows.Add(cells);
         }
 
-        return CsvContactImporter.FromRows(rows);
+        return rows;
     }
 }

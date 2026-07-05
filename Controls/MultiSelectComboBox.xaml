@@ -1,6 +1,17 @@
 <UserControl x:Class="BadmintonClub.Controls.MultiSelectComboBox"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <!-- Multi-sélection : cases à cocher -->
+        <DataTemplate x:Key="MultiTemplate">
+            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                      Content="{Binding Text}" Margin="2,1" FontSize="13" />
+        </DataTemplate>
+        <!-- Sélection unique : simple texte cliquable (pas de case à cocher) -->
+        <DataTemplate x:Key="SingleTemplate">
+            <TextBlock Text="{Binding Text}" Margin="4,3" FontSize="13" />
+        </DataTemplate>
+    </UserControl.Resources>
     <Grid>
         <ToggleButton x:Name="Toggle" Height="30" HorizontalContentAlignment="Stretch"
                       Padding="8,0" Background="White" BorderBrush="#CCCCCC" BorderThickness="1"
@@ -27,21 +38,16 @@
                     <TextBox x:Name="SearchBox" DockPanel.Dock="Top"
                              Style="{StaticResource RoundedSearchBox}"
                              TextChanged="SearchBox_TextChanged" />
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,6,0,5">
+                    <StackPanel x:Name="BulkButtons" DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,6,0,5">
                         <Button Content="Tout" Padding="7,2" MinWidth="0" Click="SelectAll_Click" />
                         <Button Content="Aucun" Padding="7,2" MinWidth="0" Click="SelectNone_Click" />
                     </StackPanel>
                     <TextBlock x:Name="EmptyText" DockPanel.Dock="Top" Foreground="#999999"
                                FontSize="12" Margin="2,4" Visibility="Collapsed" />
                     <ListBox x:Name="OptionsList" MaxHeight="170" BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Content="{Binding Text}" Margin="2,1" FontSize="13" />
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                             ItemTemplate="{StaticResource MultiTemplate}"
+                             SelectionChanged="OptionsList_SelectionChanged"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
                 </DockPanel>
             </Border>
         </Popup>

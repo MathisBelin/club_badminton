@@ -149,12 +149,14 @@ public class GoogleSheetsService
             do
             {
                 var request = drive.Files.List();
-                request.Q = "mimeType='application/vnd.google-apps.spreadsheet' " +
-                            "and trashed=false and 'me' in owners";
+                // Tous les classeurs accessibles au compte (les tiens + ceux partagés avec toi).
+                request.Q = "mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
                 request.Fields = "nextPageToken, files(id, name, createdTime, webViewLink)";
                 request.Spaces = "drive";
                 request.PageSize = 1000;
                 request.OrderBy = "createdTime desc";
+                request.IncludeItemsFromAllDrives = true;
+                request.SupportsAllDrives = true;
                 request.PageToken = pageToken;
 
                 var response = await request.ExecuteAsync(ct);
@@ -280,6 +282,29 @@ public class GoogleSheetsService
         }
         catch (GoogleSyncException) { throw; }
         catch (Exception ex) { throw GoogleErrors.Translate(ex, "Impossible de modifier le partage du classeur."); }
+    }
+
+    /// <summary>Lit une plage de cellules (ex. « A1:F110 ») et renvoie les lignes de texte.</summary>
+    public async Task<List<string[]>> ReadRowsAsync(string spreadsheetId, string range, CancellationToken ct = default)
+    {
+        var credential = await GoogleAuth.AuthorizeAsync(Scopes, User, ct);
+        try
+        {
+            using var sheets = new SheetsService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = AppName
+            });
+
+            var response = await sheets.Spreadsheets.Values.Get(spreadsheetId, range).ExecuteAsync(ct);
+            var rows = new List<string[]>();
+            if (response.Values != null)
+                foreach (var row in response.Values)
+                    rows.Add(row.Select(c => c?.ToString() ?? string.Empty).ToArray());
+            return rows;
+        }
+        catch (GoogleSyncException) { throw; }
+        catch (Exception ex) { throw GoogleErrors.Translate(ex, "Impossible de lire la plage du Sheet."); }
     }
 
     /// <summary>Exporte le classeur en CSV (première feuille) vers un fichier local.</summary>

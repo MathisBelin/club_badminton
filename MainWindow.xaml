@@ -32,8 +32,23 @@
                         <RadioButton x:Name="NavLabels" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="labels" Content="🏷   Libellés Gmail"
                                      Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavAssociation" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="association" Content="🔗   Association"
+                                     Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavEmail" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="email" Checked="Nav_Checked">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="M2,21L23,12L2,3V10L17,12L2,14V21Z" Width="17" Height="17"
+                                      Stretch="Uniform" VerticalAlignment="Center"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+                                <TextBlock Text="E-mail" Margin="14,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </RadioButton>
                         <RadioButton x:Name="NavSheets" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="sheets" Content="📄   Google Sheets"
+                                     Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavAutoSync" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="autosync" Content="🔄   Synchro auto"
                                      Checked="Nav_Checked" />
                         <RadioButton x:Name="NavSettings" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="settings" Content="⚙   Paramètres"
@@ -59,7 +74,86 @@
 
             <!-- Zone de contenu -->
             <Border Grid.Column="1" Background="#F4F6F4">
-                <ContentControl x:Name="ContentHost" />
+                <DockPanel>
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E4E9E4"
+                            BorderThickness="0,0,0,1" Padding="24,10">
+                        <Grid>
+                            <TextBlock Text="🏸 Gestion du club de badminton" FontWeight="SemiBold"
+                                       Foreground="#233323" VerticalAlignment="Center" />
+
+                            <Border x:Name="OfflineWarning" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Background="#FDECEA" BorderBrush="#F5C6C0" BorderThickness="1"
+                                    CornerRadius="14" Padding="12,4" Visibility="Collapsed">
+                                <TextBlock Text="⚠ Pas de connexion Internet — synchronisation en pause"
+                                           Foreground="#B71C1C" FontSize="12" FontWeight="SemiBold" />
+                            </Border>
+
+                            <!-- Bouton notification des synchros en cours -->
+                            <StackPanel x:Name="NotifArea" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                        Visibility="Collapsed">
+                                <Button x:Name="NotifButton" Click="NotifButton_Click" Padding="8,4"
+                                        Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                        ToolTip="Synchronisations en cours">
+                                    <Grid>
+                                        <TextBlock Text="🔔" FontSize="17" />
+                                        <Border x:Name="NotifBadge" Background="#2E7D32" CornerRadius="8"
+                                                MinWidth="16" Height="16" Padding="3,0" Visibility="Collapsed"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-6,0">
+                                            <TextBlock x:Name="NotifCount" Foreground="White" FontSize="10"
+                                                       FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                                <Popup x:Name="NotifPopup" StaysOpen="False" Placement="Bottom"
+                                       PlacementTarget="{Binding ElementName=NotifButton}"
+                                       AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-220">
+                                    <Border Background="White" BorderBrush="#DDE7DD" BorderThickness="1"
+                                            CornerRadius="6" Padding="12" Width="300" Margin="0,4,8,0">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#40000000" BlurRadius="12" ShadowDepth="2" />
+                                        </Border.Effect>
+                                        <StackPanel>
+                                            <TextBlock Text="Synchronisations en cours" FontWeight="SemiBold"
+                                                       Foreground="#233323" Margin="0,0,0,8" />
+                                            <TextBlock x:Name="NotifEmpty" Text="Aucune synchro en marche."
+                                                       Foreground="#999999" FontSize="12" Visibility="Collapsed" />
+                                            <ItemsControl x:Name="NotifList">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="0,4">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0">
+                                                                <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                                    <TextBlock Text="⟳" FontSize="12" Foreground="#2E7D32"
+                                                                               Margin="0,0,5,0" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding CountdownText}" FontSize="11"
+                                                                               Foreground="#2E7D32" VerticalAlignment="Center" />
+                                                                    <TextBlock Text="{Binding ProgressText}" FontSize="11" FontWeight="SemiBold"
+                                                                               Foreground="#2E7D32" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                                               Visibility="{Binding IsImporting, Converter={StaticResource BoolToVisibility}}" />
+                                                                </StackPanel>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1" Content="Suspendre" Padding="7,3"
+                                                                    VerticalAlignment="Center" Click="Suspend_Click" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <ContentControl x:Name="ContentHost" />
+                </DockPanel>
             </Border>
         </Grid>
 

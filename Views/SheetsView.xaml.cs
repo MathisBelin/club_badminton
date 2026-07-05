@@ -45,7 +45,24 @@ public partial class SheetsView : UserControl, IActivableView
         UpdateBulkBar();
     }
 
-    private void UpdateCount() => CountText.Text = $"{_sheets.Count} classeur(s)";
+    private void UpdateCount()
+    {
+        var total = _sheets.Count;
+        var shown = _view?.Cast<object>().Count() ?? total;
+        CountText.Text = shown == total
+            ? $"{total} classeur(s)"
+            : $"{shown} sur {total} classeur(s)";
+
+        if (shown > 0)
+            EmptyResults.Visibility = Visibility.Collapsed;
+        else
+        {
+            EmptyResults.Text = total == 0
+                ? "Aucun classeur pour le moment."
+                : "Aucun résultat pour cette recherche.";
+            EmptyResults.Visibility = Visibility.Visible;
+        }
+    }
 
     // ---- Filtres (nom + période) -----------------------------------------
 
@@ -67,16 +84,8 @@ public partial class SheetsView : UserControl, IActivableView
         return true;
     }
 
-    private void Search_Changed(object sender, TextChangedEventArgs e) => _view?.Refresh();
-    private void Date_Changed(object sender, SelectionChangedEventArgs e) => _view?.Refresh();
-
-    private void ResetFilter_Click(object sender, RoutedEventArgs e)
-    {
-        SearchBox.Clear();
-        FromDate.SelectedDate = null;
-        ToDate.SelectedDate = null;
-        _view?.Refresh();
-    }
+    private void Search_Changed(object sender, TextChangedEventArgs e) { _view?.Refresh(); UpdateCount(); }
+    private void Date_Changed(object sender, SelectionChangedEventArgs e) { _view?.Refresh(); UpdateCount(); }
 
     // ---- Sélection --------------------------------------------------------
 
@@ -151,10 +160,8 @@ public partial class SheetsView : UserControl, IActivableView
         if ((sender as FrameworkElement)?.DataContext is not SheetRecord s)
             return;
 
-        var confirm = MessageBox.Show(Window.GetWindow(this),
-            $"Supprimer définitivement « {s.Nom} » ?\nIl sera supprimé de Google Drive et de cette liste.",
-            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        if (!ConfirmWindow.Ask(Window.GetWindow(this), "Supprimer le classeur",
+                $"Supprimer définitivement « {s.Nom} » ?\nIl sera supprimé de Google Drive et de cette liste."))
             return;
 
         await DeleteSheetsAsync(new[] { s });
@@ -166,11 +173,8 @@ public partial class SheetsView : UserControl, IActivableView
         if (selected.Count == 0)
             return;
 
-        var confirm = MessageBox.Show(Window.GetWindow(this),
-            $"Supprimer définitivement les {selected.Count} classeur(s) sélectionné(s) ?\n" +
-            "Ils seront supprimés de Google Drive et de cette liste.",
-            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        if (!ConfirmWindow.Ask(Window.GetWindow(this), "Supprimer les classeurs",
+                $"Supprimer définitivement les {selected.Count} classeur(s) sélectionné(s) ?\nIls seront supprimés de Google Drive et de cette liste."))
             return;
 
         await DeleteSheetsAsync(selected);

@@ -20,6 +20,16 @@ public static class AppPaths
     /// <summary>Registre local des Google Sheets créés par l'appli.</summary>
     public static string WorksheetsFile => Path.Combine(DataFolder, "worksheets.json");
 
+    /// <summary>Dossier de stockage des modèles de Sheets (Excel/CSV).</summary>
+    public static string ModelsFolder => Path.Combine(DataFolder, "modeles");
+
+    public static void EnsureModelsFolder() => Directory.CreateDirectory(ModelsFolder);
+
+    /// <summary>Dossier de stockage des modèles de mails.</summary>
+    public static string MailTemplatesFolder => Path.Combine(DataFolder, "mails");
+
+    public static void EnsureMailTemplatesFolder() => Directory.CreateDirectory(MailTemplatesFolder);
+
     /// <summary>Dossier des données par compte Google.</summary>
     public static string AccountsFolder => Path.Combine(DataFolder, "accounts");
 

@@ -89,6 +89,21 @@ public partial class SheetOptionsWindow : Window
                 MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private async void Modele_Click(object sender, RoutedEventArgs e)
+    {
+        AppPaths.EnsureModelsFolder();
+        var dest = System.IO.Path.Combine(AppPaths.ModelsFolder, SanitizeFileName(_record.Nom) + ".csv");
+
+        var result = await ProgressRunner.RunBusyAsync(this, "Enregistrement du modèle…",
+            () => _sheets.DownloadCsvAsync(_record.SpreadsheetId, dest));
+
+        if (result.Failed > 0)
+            MessageBox.Show(this, result.LastError, "Modèle", MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            MessageBox.Show(this, $"Modèle enregistré :\n{dest}\n\nIl apparaîtra dans « À partir d'un modèle » à la création d'un Sheet.",
+                "Modèle", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private void Ouvrir_Click(object sender, RoutedEventArgs e) => BrowserService.Open(_record.Url);
 
     private void Fermer_Click(object sender, RoutedEventArgs e) => Close();

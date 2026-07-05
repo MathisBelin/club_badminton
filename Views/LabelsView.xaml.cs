@@ -75,9 +75,21 @@ public partial class LabelsView : UserControl, IActivableView
     }
 
     private void UpdateCount()
-        => CountText.Text = _loadedOnce
+    {
+        CountText.Text = _loadedOnce
             ? $"{_labels.Count} libellé(s)"
             : "Chargement des libellés…";
+
+        if (_loadedOnce && _labels.Count == 0)
+        {
+            EmptyResults.Text = "Aucun libellé pour le moment.";
+            EmptyResults.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            EmptyResults.Visibility = Visibility.Collapsed;
+        }
+    }
 
     // ---- Sélection --------------------------------------------------------
 
@@ -142,6 +154,23 @@ public partial class LabelsView : UserControl, IActivableView
                 MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    // ---- Voir les membres (page Association) ------------------------------
+
+    /// <summary>Demande d'ouvrir la page Association filtrée sur un libellé (resourceName).</summary>
+    public event Action<string>? OpenAssociationRequested;
+
+    private void Voir_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is LabelItem label)
+            OpenAssociationRequested?.Invoke(label.ResourceName);
+    }
+
+    private void Grid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (Grid.SelectedItem is LabelItem label)
+            OpenAssociationRequested?.Invoke(label.ResourceName);
+    }
+
     // ---- Renommer / supprimer --------------------------------------------
 
     private async void Renommer_Click(object sender, RoutedEventArgs e)
@@ -170,10 +199,8 @@ public partial class LabelsView : UserControl, IActivableView
         if ((sender as FrameworkElement)?.DataContext is not LabelItem label)
             return;
 
-        var confirm = MessageBox.Show(Window.GetWindow(this),
-            $"Supprimer le libellé « {label.Nom} » ?\nLes contacts eux-mêmes ne seront pas supprimés.",
-            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        if (!ConfirmWindow.Ask(Window.GetWindow(this), "Supprimer le libellé",
+                $"Supprimer le libellé « {label.Nom} » ?\nLes contacts eux-mêmes ne seront pas supprimés."))
             return;
 
         await DeleteLabelsAsync(new[] { label });
@@ -185,11 +212,8 @@ public partial class LabelsView : UserControl, IActivableView
         if (selected.Count == 0)
             return;
 
-        var confirm = MessageBox.Show(Window.GetWindow(this),
-            $"Supprimer les {selected.Count} libellé(s) sélectionné(s) ?\n" +
-            "Les contacts eux-mêmes ne seront pas supprimés.",
-            "Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        if (!ConfirmWindow.Ask(Window.GetWindow(this), "Supprimer les libellés",
+                $"Supprimer les {selected.Count} libellé(s) sélectionné(s) ?\nLes contacts eux-mêmes ne seront pas supprimés."))
             return;
 
         await DeleteLabelsAsync(selected);

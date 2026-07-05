@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -11,10 +11,16 @@
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Product>Club de Badminton</Product>
     <AssemblyTitle>Club de Badminton</AssemblyTitle>
     <Company>Club de Badminton</Company>
+
+    <!-- Publication single-file WPF : embarquer les DLL natives (PresentationNative,
+         wpfgfx...) DANS l'exe. Sinon l'exe seul plante au demarrage
+         (DllNotFoundException) car l'installeur ne copie que BadmintonClub.exe.
+         Elles sont extraites au 1er lancement. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Versions flottantes : NuGet prendra la dernière 1.x compatible.
+    <!-- Versions flottantes : NuGet prendra la derniÃ¨re 1.x compatible.
          Remplacez par une version fixe si vous voulez verrouiller le build. -->
     <PackageReference Include="Google.Apis.Auth" Version="1.*" />
     <PackageReference Include="Google.Apis.PeopleService.v1" Version="1.*" />
@@ -32,9 +38,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Copiés à côté de l'exe s'ils existent (ne font pas échouer le build s'ils sont absents). -->
+    <!-- CopiÃ©s Ã  cÃ´tÃ© de l'exe s'ils existent (ne font pas Ã©chouer le build s'ils sont absents). -->
     <None Update="client_secret.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('client_secret.json')" />
     <None Update="config.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('config.json')" />
   </ItemGroup>
 
 </Project>
+

@@ -17,9 +17,11 @@ $iss    = Join-Path $root "installer\ClubBadminton.iss"
 
 # 1. Mise à jour éventuelle du numéro de version
 if ($Version) {
-    (Get-Content $csproj -Raw) -replace '<Version>[^<]+</Version>', "<Version>$Version</Version>" |
+    # Lire ET écrire en UTF-8 explicite : sinon PowerShell 5.1 relit ces fichiers
+    # en ANSI et corrompt les accents (« Créer » -> « CrÃ©er »).
+    (Get-Content $csproj -Raw -Encoding utf8) -replace '<Version>[^<]+</Version>', "<Version>$Version</Version>" |
         Set-Content $csproj -Encoding utf8
-    (Get-Content $iss -Raw) -replace '#define MyAppVersion "[^"]+"', "#define MyAppVersion `"$Version`"" |
+    (Get-Content $iss -Raw -Encoding utf8) -replace '#define MyAppVersion "[^"]+"', "#define MyAppVersion `"$Version`"" |
         Set-Content $iss -Encoding utf8
     Write-Host "Version -> $Version" -ForegroundColor Cyan
 }

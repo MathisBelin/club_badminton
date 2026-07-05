@@ -4,7 +4,7 @@
 ;   dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "Club de Badminton"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Club de Badminton"
 #define MyAppExeName "BadmintonClub.exe"
 #define PublishDir "..\bin\Release\net8.0-windows\win-x64\publish"

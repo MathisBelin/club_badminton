@@ -5,29 +5,103 @@
     <DockPanel Margin="24">
 
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-            <TextBlock Text="Personnes en attente" Style="{StaticResource PageTitle}" />
-            <TextBlock x:Name="CountText" Foreground="#777777" FontSize="12" Margin="0,2,0,0"
-                       Text="Personnes ayant renseigné des infos dans le Sheet mais sans e-mail." />
+            <TextBlock Text="Inscriptions non finalisées" Style="{StaticResource PageTitle}" />
+            <TextBlock Foreground="#555555" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"
+                       Text="Liste des personnes pour lesquelles il manque des informations (e-mail) dans le Sheet. Complétez leur inscription dans le Sheet ; elles disparaîtront à la prochaine synchronisation." />
+            <TextBlock x:Name="CountText" Foreground="#777777" FontSize="12" Margin="0,4,0,0" />
 
             <StackPanel Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center">
+                <ctrl:SearchBox x:Name="SearchBox" Width="230" Margin="0,0,16,0"
+                                TextChanged="SearchBox_TextChanged" PlaceholderText="Nom, prénom, tél…" />
                 <TextBlock Text="Libellé :" VerticalAlignment="Center" Margin="0,0,8,0"
                            Foreground="#555555" FontWeight="SemiBold" />
-                <ctrl:MultiSelectComboBox x:Name="LabelFilter" Width="240" VerticalAlignment="Center" />
-                <Button x:Name="ClearFilterBtn" Content="✕" Visibility="Collapsed" MinWidth="0"
-                        Padding="9,5" Margin="6,0,0,0" Click="ClearFilter_Click"
-                        ToolTip="Effacer le filtre par libellé" />
+                <ctrl:MultiSelectComboBox x:Name="LabelFilter" Width="200" VerticalAlignment="Center" />
+                <TextBlock Text="Correspondance :" VerticalAlignment="Center" Margin="16,0,8,0"
+                           Foreground="#555555" FontWeight="SemiBold" />
+                <ComboBox x:Name="LevelCombo" Width="130" VerticalContentAlignment="Center"
+                          SelectionChanged="LevelFilter_Changed">
+                    <ComboBoxItem IsSelected="True">Tous</ComboBoxItem>
+                    <ComboBoxItem>Connue</ComboBoxItem>
+                    <ComboBoxItem>Doute</ComboBoxItem>
+                    <ComboBoxItem>Inconnue</ComboBoxItem>
+                </ComboBox>
             </StackPanel>
         </StackPanel>
+
+        <!-- Barre d'actions groupées -->
+        <Border x:Name="BulkBar" DockPanel.Dock="Top" Visibility="Collapsed"
+                Background="#EAF2EA" BorderBrush="#C8E6C9" BorderThickness="1"
+                CornerRadius="6" Padding="12,8" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="BulkCountText" Grid.Column="0" VerticalAlignment="Center"
+                           Foreground="#1B5E20" FontWeight="SemiBold" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="Annuler la sélection" Click="ClearSelection_Click" />
+                    <Button x:Name="BulkDeleteButton" Style="{StaticResource PrimaryButton}"
+                            Click="BulkDelete_Click" Margin="0" />
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <Grid>
             <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
                       SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader">
                 <DataGrid.Columns>
+                    <DataGridTemplateColumn Width="42" CanUserResize="False">
+                        <DataGridTemplateColumn.Header>
+                            <CheckBox x:Name="SelectAllBox" Click="SelectAll_Click"
+                                      HorizontalAlignment="Center" ToolTip="Tout sélectionner" />
+                        </DataGridTemplateColumn.Header>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="Libellé" Binding="{Binding LabelName}" Width="*" />
                     <DataGridTextColumn Header="Nom" Binding="{Binding Nom}" Width="*" />
                     <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="*" />
-                    <DataGridTextColumn Header="Téléphone" Binding="{Binding Telephone}" Width="150" />
+                    <DataGridTextColumn Header="Téléphone" Binding="{Binding Telephone}" Width="130" />
+                    <DataGridTemplateColumn Header="E-mail" Width="220" SortMemberPath="Email">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding EmailDisplay}" Foreground="{Binding EmailBrush}"
+                                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding EmailDisplay}" />
+                                    <TextBlock Text="(format incorrect)" Foreground="{Binding EmailBrush}"
+                                               FontSize="10" Visibility="{Binding EmailNoteVisibility}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Correspondance" Width="130" SortMemberPath="Level">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold"
+                                           Foreground="{Binding Level, Converter={StaticResource MatchLevelBrush}}"
+                                           Text="{Binding Level, Converter={StaticResource MatchLevelText}}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Actions" Width="120" CanUserResize="False">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button Content="👁" Style="{StaticResource RowBlueButton}" FontSize="14"
+                                            Click="Matches_Click" ToolTip="Voir les contacts correspondants" />
+                                    <Button Content="✔" Style="{StaticResource RowModifyButton}" FontSize="14"
+                                            Click="Delete_Click" ToolTip="Valider (retirer de cette liste)" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
             <TextBlock x:Name="EmptyResults" Visibility="Collapsed" IsHitTestVisible="False"

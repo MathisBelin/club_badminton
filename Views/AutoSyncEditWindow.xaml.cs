@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using BadmintonClub.Models;
 using BadmintonClub.Services;
@@ -34,6 +35,7 @@ public partial class AutoSyncEditWindow : Window
         ColPrenomBox.Text = _config.ColPrenom;
         ColTelBox.Text = _config.ColTel;
         ColEmailBox.Text = _config.ColEmail;
+        AutoKnownCheck.IsChecked = _config.AutoAssociateKnown;
         EnabledCheck.IsChecked = _isNew || _config.Enabled;
 
         LabelSelect.Placeholder = "Choisir un libellé";
@@ -149,46 +151,112 @@ public partial class AutoSyncEditWindow : Window
         }
     }
 
-    private void Enregistrer_Click(object sender, RoutedEventArgs e)
+    // ---- Vérification du lien du Sheet -----------------------------------
+
+    private async void VerifyUrl_Click(object sender, RoutedEventArgs e)
     {
-        var name = NameBox.Text.Trim();
         var url = UrlBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(name))
+        if (string.IsNullOrWhiteSpace(url))
         {
-            Warn("Donnez un nom à la synchro.");
+            SetUrlBorder(null);
+            ShowResult("✘ Renseignez d'abord le lien du Sheet.", ErrBrush);
             return;
         }
-        if (AppServices.ExtractSheetId(url) == null)
+        if (!IsOnline())
         {
-            Warn("Le lien du Google Sheet est invalide.");
+            SetUrlBorder(null);
+            ShowResult("Hors ligne : impossible de vérifier le lien pour le moment.", NeutralBrush);
             return;
         }
 
-        var label = LabelSelect.SelectedOption;
-        if (label?.Tag is not string labelResource || string.IsNullOrWhiteSpace(labelResource))
+        VerifyUrlBtn.IsEnabled = false;
+        ShowResult("Vérification du lien en cours…", NeutralBrush);
+        try
         {
-            Warn("Choisissez un libellé cible.");
-            return;
+            var ok = await _services.SheetExistsAsync(url);
+            SetUrlBorder(ok);
+            ShowResult(ok
+                ? "✔ Le lien du Sheet est valide et accessible."
+                : "✘ Ce lien de Google Sheet est introuvable ou inaccessible.", ok ? OkBrush : ErrBrush);
         }
-        if (_services.IsLabelInUse(labelResource, _config.Id))
+        catch (System.Exception ex)
+        {
+            SetUrlBorder(false);
+            ShowResult("✘ " + ex.Message, ErrBrush);
+        }
+        finally
+        {
+            VerifyUrlBtn.IsEnabled = true;
+        }
+    }
+
+    private void UrlBox_TextChanged(object sender, TextChangedEventArgs e) => SetUrlBorder(null);
+
+    /// <summary>Colore le contour du champ lien : vert = existe, rouge = introuvable, null = neutre.</summary>
+    private void SetUrlBorder(bool? ok)
+    {
+        if (ok == null)
+        {
+            UrlBox.ClearValue(BorderBrushProperty);
+            UrlBox.ClearValue(BorderThicknessProperty);
+        }
+        else
+        {
+            UrlBox.BorderBrush = ok.Value ? OkBrush : ErrBrush;
+            UrlBox.BorderThickness = new Thickness(2);
+        }
+    }
+
+    private static bool IsOnline()
+        => System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable();
+
+    private async void Enregistrer_Click(object sender, RoutedEventArgs e)
+    {
+        // Enregistrement en brouillon autorisé : on n'exige plus tous les champs. Seule contrainte
+        // bloquante conservée : si un libellé est choisi, il ne doit pas être déjà utilisé ailleurs.
+        var label = LabelSelect.SelectedOption;
+        var labelResource = label?.Tag as string ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(labelResource) && _services.IsLabelInUse(labelResource, _config.Id))
         {
             Warn("Ce libellé est déjà ciblé par une autre synchro. Choisissez-en un autre.");
             return;
         }
 
+        // Un lien renseigné doit exister (vérifiable uniquement en ligne).
+        var linkUrl = UrlBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(linkUrl) && IsOnline())
+        {
+            IsEnabled = false;
+            bool exists;
+            try { exists = await _services.SheetExistsAsync(linkUrl); }
+            finally { IsEnabled = true; }
+
+            if (!exists)
+            {
+                SetUrlBorder(false);
+                ShowResult("✘ Ce lien de Google Sheet est introuvable ou inaccessible.", ErrBrush);
+                Warn("Le lien du Google Sheet est introuvable ou inaccessible. Corrigez-le ou laissez-le vide.");
+                return;
+            }
+            SetUrlBorder(true);
+        }
+
         var (start, end, nom, prenom, tel, mail) = ReadInputs();
 
-        _config.Name = name;
-        _config.SheetUrl = url;
+        _config.Name = NameBox.Text.Trim();
+        _config.SheetUrl = UrlBox.Text.Trim();
         _config.LabelResourceName = labelResource;
-        _config.LabelName = label.Text;
+        _config.LabelName = label?.Text ?? string.Empty;
         _config.StartRow = start;
         _config.EndRow = end;
         _config.ColNom = nom;
         _config.ColPrenom = prenom;
         _config.ColTel = tel;
         _config.ColEmail = mail;
-        _config.Enabled = EnabledCheck.IsChecked == true;
+        _config.AutoAssociateKnown = AutoKnownCheck.IsChecked == true;
+
+        // Une synchro incomplète (brouillon) ne peut pas être activée, même si la case est cochée.
+        _config.Enabled = EnabledCheck.IsChecked == true && _config.IsComplete;
 
         _services.AddOrUpdateSync(_config);
         if (_config.Enabled)

@@ -18,7 +18,15 @@
                 <TextBox x:Name="NameBox" />
 
                 <TextBlock Text="Lien du Google Sheet" Style="{StaticResource FormLabel}" Margin="0,12,0,0" />
-                <TextBox x:Name="UrlBox" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="UrlBox" Grid.Column="0" TextChanged="UrlBox_TextChanged" />
+                    <Button x:Name="VerifyUrlBtn" Grid.Column="1" Content="🔎 Vérifier" Margin="8,0,0,0"
+                            Click="VerifyUrl_Click" ToolTip="Vérifier que le lien du Sheet existe" />
+                </Grid>
 
                 <TextBlock Text="Libellé cible" Style="{StaticResource FormLabel}" Margin="0,12,0,0" />
                 <ctrl:MultiSelectComboBox x:Name="LabelSelect" SingleSelect="True" HorizontalAlignment="Left" Width="320" />
@@ -80,6 +88,11 @@
                         </Border>
                     </StackPanel>
                 </Border>
+
+                <CheckBox x:Name="AutoKnownCheck" Margin="0,14,0,0"
+                          Content="Associer automatiquement les personnes « connues »" />
+                <TextBlock Foreground="#888888" FontSize="11" Margin="22,3,0,0" TextWrapping="Wrap"
+                           Text="Une personne sans e-mail dans le Sheet, mais dont les infos correspondent de façon certaine à un seul contact existant, est associée au libellé (et n'apparaît plus dans les inscriptions non finalisées). En cas de doute, elle y reste. Le Sheet n'est jamais modifié." />
 
                 <CheckBox x:Name="EnabledCheck" Margin="0,14,0,0"
                           Content="Activer cette synchro (toutes les 5 minutes)" IsChecked="True" />

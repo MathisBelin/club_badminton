@@ -18,11 +18,13 @@
                                     TextChanged="Search_Changed" PlaceholderText="Rechercher par nom…" />
                     <StackPanel Orientation="Horizontal" Margin="0,0,10,4">
                         <TextBlock Text="Du" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="#555555" />
-                        <DatePicker x:Name="FromDate" Width="140" SelectedDateChanged="Date_Changed" />
+                        <DatePicker x:Name="FromDate" Width="180" SelectedDateChanged="Date_Changed" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,8,4">
                         <TextBlock Text="Au" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="#555555" />
-                        <DatePicker x:Name="ToDate" Width="140" SelectedDateChanged="Date_Changed" />
+                        <DatePicker x:Name="ToDate" Width="180" SelectedDateChanged="Date_Changed" />
+                        <Button x:Name="ClearDatesBtn" Content="✕" MinWidth="0" Padding="9,5" Margin="6,0,0,0"
+                                VerticalAlignment="Center" Click="ClearDates_Click" ToolTip="Effacer la période" />
                     </StackPanel>
                 </WrapPanel>
             </DockPanel>

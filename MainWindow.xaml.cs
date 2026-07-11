@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly EmailView _emailView;
     private readonly SheetsView _sheetsView;
     private readonly AutoSyncView _autoSyncView;
+    private readonly HistoryView _historyView;
     private readonly SettingsView _settingsView;
 
     public MainWindow()
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
         _emailView = new EmailView(_services);
         _sheetsView = new SheetsView(_services);
         _autoSyncView = new AutoSyncView(_services);
+        _historyView = new HistoryView(_services);
         _settingsView = new SettingsView(_services);
 
         // Depuis la page Libellés : ouvrir la page Association filtrée sur le libellé cliqué.
@@ -41,6 +43,13 @@ public partial class MainWindow : Window
 
         // Depuis la page Association : ouvrir « Personnes en attente » filtré sur le libellé courant.
         _associationView.OpenPendingRequested += resourceName =>
+        {
+            NavPending.IsChecked = true;
+            _pendingView.ShowForLabel(resourceName);
+        };
+
+        // Depuis la modale d'alerte d'une synchro : idem, filtré sur le libellé de la synchro.
+        _autoSyncView.OpenPendingRequested += resourceName =>
         {
             NavPending.IsChecked = true;
             _pendingView.ShowForLabel(resourceName);
@@ -91,6 +100,21 @@ public partial class MainWindow : Window
         NotifArea.Visibility = Visibility.Visible;
         NotifBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
         NotifCount.Text = count.ToString();
+
+        // Pastille jaune si au moins une synchro active a des inscriptions non finalisées.
+        var hasIncomplete = _services.AutoSyncs.Any(s => s.Enabled && s.HasIncomplete);
+        NotifWarnBadge.Visibility = hasIncomplete ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Ouvre la page « Inscriptions non finalisées » filtrée sur le libellé de la synchro.</summary>
+    private void NotifPending_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as System.Windows.Documents.Hyperlink)?.DataContext is Models.AutoSyncConfig c)
+        {
+            NotifPopup.IsOpen = false;
+            NavPending.IsChecked = true;
+            _pendingView.ShowForLabel(c.LabelResourceName);
+        }
     }
 
     /// <summary>Remplit la liste du popup (les minuteurs s'actualisent ensuite par binding).</summary>
@@ -116,6 +140,21 @@ public partial class MainWindow : Window
             RefreshNotifList();
             UpdateNotif();
         }
+    }
+
+    /// <summary>Synchronise immédiatement une seule synchro (bouton logo de sa ligne).</summary>
+    private void SyncOne_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Models.AutoSyncConfig c)
+            return;
+        if (!IsOnline())
+        {
+            MessageBox.Show(this, "Pas de connexion Internet : la synchronisation est en pause.",
+                "Synchronisation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (!c.IsImporting)
+            _ = _services.RunSyncNowAsync(c);
     }
 
     private async Task CheckForUpdateAsync()
@@ -256,6 +295,7 @@ public partial class MainWindow : Window
             "email" => _emailView,
             "sheets" => _sheetsView,
             "autosync" => _autoSyncView,
+            "history" => _historyView,
             "settings" => _settingsView,
             _ => null
         };

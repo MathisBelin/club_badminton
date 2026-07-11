@@ -25,6 +25,19 @@ public static class AppPaths
 
     public static void EnsureModelsFolder() => Directory.CreateDirectory(ModelsFolder);
 
+    /// <summary>Dossier « Téléchargements » de l'utilisateur (repli sur le profil si absent).</summary>
+    public static string DownloadsFolder
+    {
+        get
+        {
+            var downloads = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            return Directory.Exists(downloads)
+                ? downloads
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        }
+    }
+
     /// <summary>Dossier de stockage des modèles de mails.</summary>
     public static string MailTemplatesFolder => Path.Combine(DataFolder, "mails");
 
@@ -46,6 +59,12 @@ public static class AppPaths
         SanitizeAccount(account) == "default"
             ? WorksheetsFile
             : Path.Combine(AccountFolder(account), "worksheets.json");
+
+    /// <summary>Historique des activités par compte.</summary>
+    public static string ActivityFileFor(string account) =>
+        SanitizeAccount(account) == "default"
+            ? Path.Combine(DataFolder, "activity.json")
+            : Path.Combine(AccountFolder(account), "activity.json");
 
     private static string SanitizeAccount(string account)
     {

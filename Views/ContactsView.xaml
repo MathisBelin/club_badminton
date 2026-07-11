@@ -36,8 +36,30 @@
                           Content="Masquer les contacts sans nom / prénom / tél"
                           Checked="HideIncomplete_Changed" Unchecked="HideIncomplete_Changed"
                           ToolTip="Cache les contacts qui n'ont qu'une adresse e-mail" />
+                <Button x:Name="AdvancedToggle" Content="🔎 Recherche avancée" Margin="20,0,0,0"
+                        VerticalAlignment="Center" Click="AdvancedToggle_Click"
+                        ToolTip="Filtres avancés (période d'ajout, doublons)" />
             </StackPanel>
         </StackPanel>
+
+        <!-- Recherche avancée -->
+        <Border x:Name="AdvancedPanel" DockPanel.Dock="Top" Visibility="Collapsed"
+                Background="#F4F8FB" BorderBrush="#D6E4F0" BorderThickness="1"
+                CornerRadius="6" Padding="14,12" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Ajouté entre :" VerticalAlignment="Center" Foreground="#555555"
+                           FontWeight="SemiBold" Margin="0,0,8,0" />
+                <DatePicker x:Name="FromDate" Width="160" SelectedDateChanged="DateFilter_Changed" />
+                <TextBlock Text="et" VerticalAlignment="Center" Margin="8,0,8,0" Foreground="#555555" />
+                <DatePicker x:Name="ToDate" Width="160" SelectedDateChanged="DateFilter_Changed" />
+                <Button x:Name="ClearDatesBtn" Content="✕" MinWidth="0" Padding="9,5" Margin="6,0,0,0"
+                        VerticalAlignment="Center" Click="ClearDates_Click" ToolTip="Effacer la période" />
+                <ToggleButton x:Name="DuplicatesToggle" Content="🔁 Doublons" Margin="28,0,0,0"
+                              VerticalAlignment="Center" Padding="10,5"
+                              Checked="Duplicates_Changed" Unchecked="Duplicates_Changed"
+                              ToolTip="N'afficher que les personnes ayant un homonyme (même nom et prénom)" />
+            </StackPanel>
+        </Border>
 
         <!-- Barre d'actions groupées (animée) -->
         <Border x:Name="BulkBar" DockPanel.Dock="Top" Visibility="Collapsed"
@@ -121,6 +143,8 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Ajouté le" Width="110" SortMemberPath="DateInscription"
+                                    Binding="{Binding DateInscription, StringFormat=\{0:dd/MM/yyyy\}}" />
                 <DataGridTemplateColumn Header="Actions" Width="300" CanUserResize="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>

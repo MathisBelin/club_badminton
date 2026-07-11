@@ -667,6 +667,75 @@ public class GoogleContactsService
     }
 
     /// <summary>Ajoute ou retire un contact (par ressource) d'un libellé.</summary>
+    private static readonly HashSet<string> SystemContactGroups = new(StringComparer.Ordinal)
+    {
+        "contactGroups/all", "contactGroups/myContacts", "contactGroups/starred",
+        "contactGroups/friends", "contactGroups/family", "contactGroups/coworkers",
+        "contactGroups/blocked", "contactGroups/chatBuddies"
+    };
+
+    /// <summary>
+    /// Fixe en UN SEUL appel l'ensemble des libellés (groupes utilisateur) d'un contact. Les groupes
+    /// système (myContacts…) sont conservés. Remplace plusieurs <see cref="SetMembershipAsync"/>
+    /// successifs sur un même contact, qui pouvaient perdre une modification (dernier libellé non
+    /// dissocié) à cause de la cohérence à terme de l'API People.
+    /// </summary>
+    public async Task SetContactMembershipsAsync(
+        string contactResourceName, IEnumerable<string> userLabelResourceNames, CancellationToken ct = default)
+    {
+        await EnsureAuthenticatedAsync(ct);
+
+        try
+        {
+            var get = _service!.People.Get(contactResourceName);
+            get.PersonFields = "memberships,metadata";
+            var person = await get.ExecuteAsync(ct);
+
+            var memberships = new List<Membership>();
+            var present = new HashSet<string>(StringComparer.Ordinal);
+
+            void AddGroup(string res)
+            {
+                if (present.Add(res))
+                    memberships.Add(new Membership
+                    {
+                        ContactGroupMembership = new ContactGroupMembership { ContactGroupResourceName = res }
+                    });
+            }
+
+            // Conserve les groupes système existants (starred, family, etc.).
+            if (person.Memberships != null)
+                foreach (var m in person.Memberships)
+                {
+                    var res = m.ContactGroupMembership?.ContactGroupResourceName;
+                    if (res != null && SystemContactGroups.Contains(res))
+                        AddGroup(res);
+                }
+
+            // Un contact doit TOUJOURS appartenir à au moins un groupe (contrainte People API) :
+            // on garantit « My Contacts » pour qu'il reste visible même sans aucun libellé.
+            AddGroup("contactGroups/myContacts");
+
+            // Applique exactement les libellés utilisateur voulus.
+            foreach (var res in userLabelResourceNames.Where(r => !string.IsNullOrWhiteSpace(r)))
+                AddGroup(res);
+
+            person.Memberships = memberships;
+
+            var update = _service.People.UpdateContact(person, contactResourceName);
+            update.UpdatePersonFields = "memberships";
+            await update.ExecuteAsync(ct);
+        }
+        catch (GoogleSyncException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw GoogleErrors.Translate(ex, "Impossible de mettre à jour les libellés du contact.");
+        }
+    }
+
     public async Task SetMembershipAsync(
         string contactResourceName, string groupResourceName, bool add, CancellationToken ct = default)
     {

@@ -74,7 +74,8 @@ public partial class SheetOptionsWindow : Window
             Title = "Télécharger le classeur en CSV",
             Filter = "Fichier CSV (*.csv)|*.csv",
             FileName = SanitizeFileName(_record.Nom) + ".csv",
-            DefaultExt = ".csv"
+            DefaultExt = ".csv",
+            InitialDirectory = AppPaths.DownloadsFolder // téléchargement → dossier Téléchargements (pas les modèles)
         };
         if (dlg.ShowDialog(this) != true)
             return;

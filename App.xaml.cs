@@ -64,9 +64,20 @@ public partial class App : Application
         {
             if (ReferenceEquals(node, ancestor))
                 return true;
-            node = System.Windows.Media.VisualTreeHelper.GetParent(node)
-                   ?? System.Windows.LogicalTreeHelper.GetParent(node);
+            node = GetParent(node);
         }
         return false;
+    }
+
+    /// <summary>
+    /// Remonte d'un cran dans l'arbre. VisualTreeHelper.GetParent ne fonctionne que sur un Visual /
+    /// Visual3D ; pour un ContentElement (ex. Hyperlink) il faut passer par l'arbre logique.
+    /// </summary>
+    private static DependencyObject? GetParent(DependencyObject node)
+    {
+        if (node is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D)
+            return System.Windows.Media.VisualTreeHelper.GetParent(node)
+                   ?? System.Windows.LogicalTreeHelper.GetParent(node);
+        return System.Windows.LogicalTreeHelper.GetParent(node);
     }
 }

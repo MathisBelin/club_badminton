@@ -82,10 +82,11 @@ public partial class ManageLabelsWindow : Window
             .Select(o => (string)o.Tag!)
             .ToHashSet(StringComparer.Ordinal);
 
-        var toAdd = current.Except(_initial).ToList();
-        var toRemove = _initial.Except(current).ToList();
+        // On compare uniquement les libellés utilisateur (les groupes système ne sont pas listés).
+        var optionTags = _options.Select(o => (string)o.Tag!).ToHashSet(StringComparer.Ordinal);
+        var initialUser = _initial.Where(optionTags.Contains).ToHashSet(StringComparer.Ordinal);
 
-        if (toAdd.Count == 0 && toRemove.Count == 0)
+        if (current.SetEquals(initialUser))
         {
             DialogResult = true;
             return;
@@ -108,17 +109,25 @@ public partial class ManageLabelsWindow : Window
             return;
         }
 
-        var ops = toAdd.Select(g => (Group: g, Add: true))
-            .Concat(toRemove.Select(g => (Group: g, Add: false)))
-            .ToList();
-
-        var result = await ProgressRunner.RunAsync(this, "Mise à jour des libellés…", ops,
-            op => _services.Contacts.SetMembershipAsync(resource, op.Group, op.Add));
+        // Un seul appel : fixe l'ensemble des libellés voulus (évite la perte du dernier retrait).
+        var result = await ProgressRunner.RunBusyAsync(this, "Mise à jour des libellés…",
+            () => _services.Contacts.SetContactMembershipsAsync(resource, current));
 
         if (result.Failed > 0)
+        {
             MessageBox.Show(this,
-                $"{result.Ok} modification(s) appliquée(s), {result.Failed} en erreur.\n\n{result.LastError}",
-                "Libellés du contact", MessageBoxButton.OK, MessageBoxImage.Warning);
+                $"{result.LastError}", "Libellés du contact", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else
+        {
+            // Historique : associations/dissociations effectuées (instantané du contact figé).
+            var names = _options.ToDictionary(o => (string)o.Tag!, o => o.Text, StringComparer.Ordinal);
+
+            foreach (var g in current.Except(initialUser))
+                _services.LogContactActivity(Models.ActivityAction.Association, _adherent, names.GetValueOrDefault(g, g));
+            foreach (var g in initialUser.Except(current))
+                _services.LogContactActivity(Models.ActivityAction.Dissociation, _adherent, names.GetValueOrDefault(g, g));
+        }
 
         DialogResult = true;
     }

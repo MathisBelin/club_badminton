@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -31,6 +32,9 @@ public partial class ContactsView : UserControl, IActivableView
     private HashSet<string>? _allLabelEmails; // union des membres de tous les libellés (pour « sans libellé »)
     private readonly Dictionary<string, HashSet<string>> _labelMemberCache = new(StringComparer.Ordinal);
     private bool _hideIncomplete; // masque les contacts sans nom, ni prénom, ni téléphone
+    private bool _duplicatesOnly; // n'affiche que les homonymes (même nom + prénom, ≥ 2 personnes)
+    private HashSet<string>? _duplicateKeys; // clés « nom|prénom » en doublon (recalculées à chaque rebuild)
+    private DateTime? _dateFrom, _dateTo; // filtre par période d'ajout (DateInscription)
 
     public ContactsView(AppServices services)
     {
@@ -98,6 +102,16 @@ public partial class ContactsView : UserControl, IActivableView
             string.IsNullOrWhiteSpace(a.Telephone))
             return false;
 
+        // Filtre « doublons » : uniquement les personnes ayant un homonyme (même nom + prénom).
+        if (_duplicatesOnly && (!HasName(a) || _duplicateKeys == null || !_duplicateKeys.Contains(DupKey(a))))
+            return false;
+
+        // Filtre par période d'ajout (DateInscription).
+        if (_dateFrom is DateTime df && a.DateInscription.Date < df.Date)
+            return false;
+        if (_dateTo is DateTime dt && a.DateInscription.Date > dt.Date)
+            return false;
+
         // Filtre par libellé (recherche avancée).
         if (_labelFilterEmails != null || _filterNoLabel)
         {
@@ -129,6 +143,33 @@ public partial class ContactsView : UserControl, IActivableView
         RebuildAll();
     }
 
+    private void Duplicates_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_ready)
+            return;
+        _duplicatesOnly = DuplicatesToggle.IsChecked == true;
+        RebuildAll();
+    }
+
+    private void AdvancedToggle_Click(object sender, RoutedEventArgs e)
+        => AdvancedPanel.Visibility = AdvancedPanel.Visibility == Visibility.Visible
+            ? Visibility.Collapsed : Visibility.Visible;
+
+    private void DateFilter_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready)
+            return;
+        _dateFrom = FromDate.SelectedDate;
+        _dateTo = ToDate.SelectedDate;
+        RebuildAll();
+    }
+
+    private void ClearDates_Click(object sender, RoutedEventArgs e)
+    {
+        FromDate.SelectedDate = null;
+        ToDate.SelectedDate = null; // déclenche DateFilter_Changed → RebuildAll
+    }
+
     // ---- Pagination : construction de la page affichée -------------------
 
     /// <summary>Recompute la liste filtrée+triée, revient à la 1re page, puis affiche.</summary>
@@ -143,13 +184,39 @@ public partial class ContactsView : UserControl, IActivableView
 
     private void Rebuild()
     {
+        // Détection des homonymes (sur toute la liste) quand le filtre « doublons » est actif.
+        _duplicateKeys = _duplicatesOnly
+            ? _services.Adherents.Where(HasName)
+                .GroupBy(DupKey)
+                .Where(g => g.Count() >= 2)
+                .Select(g => g.Key)
+                .ToHashSet(StringComparer.Ordinal)
+            : null;
+
         _filtered = _services.Adherents.Where(PassesFilter).ToList();
         SortFiltered();
         RefreshPage();
     }
 
+    /// <summary>Vrai si la personne a un nom ou un prénom (sinon on l'ignore pour les doublons).</summary>
+    private static bool HasName(Adherent a)
+        => !string.IsNullOrWhiteSpace(a.Nom) || !string.IsNullOrWhiteSpace(a.Prenom);
+
+    /// <summary>Clé de comparaison des homonymes : nom + prénom normalisés (casse/espaces ignorés).</summary>
+    private static string DupKey(Adherent a)
+        => $"{(a.Nom ?? string.Empty).Trim().ToLowerInvariant()}|{(a.Prenom ?? string.Empty).Trim().ToLowerInvariant()}";
+
     private void SortFiltered()
     {
+        // Tri par date (colonne « Ajouté le ») : comparaison chronologique.
+        if (_sortMember == nameof(Adherent.DateInscription))
+        {
+            _filtered = (_sortDir == ListSortDirection.Ascending
+                ? _filtered.OrderBy(a => a.DateInscription)
+                : _filtered.OrderByDescending(a => a.DateInscription)).ToList();
+            return;
+        }
+
         Func<Adherent, string> key = _sortMember switch
         {
             nameof(Adherent.Prenom) => a => a.Prenom ?? string.Empty,
@@ -449,6 +516,7 @@ public partial class ContactsView : UserControl, IActivableView
 
         var labelResources = win.SelectedLabelResourceNames;
         var corrections = win.Corrections;
+        const string ImportDetails = "Import manuel";
 
         var toPush = new List<Adherent>();   // nouveaux + modifiés → à envoyer à Google
         int added = 0, updated = 0, unchanged = 0;
@@ -459,7 +527,13 @@ public partial class ContactsView : UserControl, IActivableView
             var existing = FindByEmail(p.Email);
             if (existing != null)
             {
-                if (ApplyImportedFields(existing, p)) { updated++; toPush.Add(existing); }
+                var (oNom, oPre, oTel, oMail) = (existing.Nom, existing.Prenom, existing.Telephone, existing.Email);
+                if (ApplyImportedFields(existing, p))
+                {
+                    updated++;
+                    toPush.Add(existing);
+                    _services.LogContactModification(existing, oNom, oPre, oTel, oMail, ImportDetails);
+                }
                 else unchanged++;
                 continue;
             }
@@ -471,10 +545,12 @@ public partial class ContactsView : UserControl, IActivableView
                 var origContact = FindByEmail(original);
                 if (origContact != null)
                 {
+                    var (oNom, oPre, oTel, oMail) = (origContact.Nom, origContact.Prenom, origContact.Telephone, origContact.Email);
                     origContact.Email = p.Email;      // remplace l'e-mail par sa correction
                     ApplyImportedFields(origContact, p);
                     updated++;
                     toPush.Add(origContact);
+                    _services.LogContactModification(origContact, oNom, oPre, oTel, oMail, ImportDetails);
                     continue;
                 }
             }
@@ -482,6 +558,7 @@ public partial class ContactsView : UserControl, IActivableView
             // 3. Nouveau contact.
             _services.Adherents.Add(p);
             added++;
+            _services.LogContactActivity(Models.ActivityAction.Ajout, p, ImportDetails);
             toPush.Add(p);
         }
 
@@ -507,15 +584,55 @@ public partial class ContactsView : UserControl, IActivableView
             _services.SaveAdherents();
             RefreshView();
             UpdateCount();
+
+            // Historique : associations aux libellés cibles de l'import.
+            if (labelResources.Count > 0)
+            {
+                var labelNames = _services.CachedLabels
+                    .GroupBy(l => l.ResourceName, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Nom, StringComparer.Ordinal);
+                foreach (var a in toPush)
+                    foreach (var res in labelResources)
+                        _services.LogContactActivity(Models.ActivityAction.Association, a,
+                            $"{labelNames.GetValueOrDefault(res, res)} ({ImportDetails})");
+            }
         }
 
         var pushNote = push.Failed > 0
             ? $"\n• {push.Failed} non synchronisé(s) avec Google (repris au prochain lancement)"
             : string.Empty;
 
-        MessageBox.Show(owner,
-            $"Import terminé :\n• {added} ajouté(s)\n• {updated} mis à jour\n• {unchanged} inchangé(s){pushNote}",
-            "Import", MessageBoxButton.OK, MessageBoxImage.Information);
+        var msg = new StringBuilder();
+        msg.Append($"Import terminé :\n• {added} ajouté(s)\n• {updated} mis à jour\n• {unchanged} inchangé(s){pushNote}");
+
+        var hasIssues = win.DuplicateEmails.Count > 0 || win.IncompletePeople.Count > 0;
+        if (hasIssues)
+        {
+            AppendList(msg, $"⚠ {win.DuplicateEmails.Count} e-mail(s) en double", win.DuplicateEmails);
+            AppendList(msg, $"⚠ {win.IncompletePeople.Count} personne(s) aux informations incomplètes (non importée(s))",
+                win.IncompletePeople);
+        }
+        else
+        {
+            msg.Append("\n\n✔ Tout s'est bien passé.");
+        }
+
+        MessageBox.Show(owner, msg.ToString(), "Import", MessageBoxButton.OK,
+            hasIssues ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
+    /// <summary>Ajoute une section « titre » + liste à puces (tronquée au-delà de 15 éléments).</summary>
+    private static void AppendList(StringBuilder sb, string title, IReadOnlyList<string> items)
+    {
+        if (items.Count == 0)
+            return;
+
+        sb.Append($"\n\n{title} :");
+        const int max = 15;
+        foreach (var item in items.Take(max))
+            sb.Append($"\n   • {item}");
+        if (items.Count > max)
+            sb.Append($"\n   … et {items.Count - max} autre(s)");
     }
 
     private Adherent? FindByEmail(string email)
@@ -588,6 +705,7 @@ public partial class ContactsView : UserControl, IActivableView
         var nouvel = dialog.Adherent;
         _services.Adherents.Add(nouvel);
         _services.SaveAdherents();
+        _services.LogContactActivity(Models.ActivityAction.Ajout, nouvel);
         RefreshView();
 
         var owner = Window.GetWindow(this)!;
@@ -638,8 +756,12 @@ public partial class ContactsView : UserControl, IActivableView
         if (dialog.ShowDialog() != true)
             return;
 
+        // Capture des valeurs avant modification pour l'historique.
+        var (oNom, oPre, oTel, oMail) = (adherent.Nom, adherent.Prenom, adherent.Telephone, adherent.Email);
+
         adherent.CopyFrom(dialog.Adherent);
         _services.SaveAdherents();
+        _services.LogContactModification(adherent, oNom, oPre, oTel, oMail, "Modification");
         RefreshView();
 
         var owner = Window.GetWindow(this)!;
@@ -668,6 +790,7 @@ public partial class ContactsView : UserControl, IActivableView
     {
         _services.Adherents.Remove(a);
         _services.SaveAdherents();
+        _services.LogContactActivity(Models.ActivityAction.Suppression, a);
 
         if (!string.IsNullOrEmpty(a.GoogleResourceName))
             await _services.Contacts.DeleteContactAsync(a.GoogleResourceName);

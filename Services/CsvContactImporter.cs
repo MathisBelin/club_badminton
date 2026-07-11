@@ -95,29 +95,30 @@ public static class CsvContactImporter
     }
 
     /// <summary>
-    /// Lignes ayant des informations (nom / prénom / téléphone) mais SANS e-mail (colonne e-mail
-    /// vide ou sans « @ »). Sert à repérer les inscriptions incomplètes.
+    /// Lignes ayant des informations (nom / prénom / téléphone) mais dont l'e-mail est manquant
+    /// OU au mauvais format non rattrapable automatiquement (virgule→point, espaces…). Sert à
+    /// repérer les inscriptions incomplètes. L'e-mail brut est renvoyé (vide si non renseigné).
     /// </summary>
-    public static List<(string Nom, string Prenom, string Tel)> BuildIncompleteFromColumns(
+    public static List<(string Nom, string Prenom, string Tel, string Email)> BuildIncompleteFromColumns(
         IReadOnlyList<string[]> rows, int? nom, int? prenom, int? tel, int? email)
     {
-        var result = new List<(string, string, string)>();
+        var result = new List<(string, string, string, string)>();
         foreach (var fields in rows)
         {
             string Get(int? idx) =>
                 idx is int i && i >= 0 && i < fields.Length ? fields[i].Trim() : string.Empty;
 
             var mail = Get(email);
-            if (mail.Contains('@'))
-                continue; // a un e-mail → traité comme contact normal
+            if (EmailValidator.IsValidOrFixable(mail))
+                continue; // e-mail valide (ou simple faute rattrapable) → contact normal
 
             var n = Get(nom);
             var p = Get(prenom);
             var t = Get(tel);
             if (string.IsNullOrWhiteSpace(n) && string.IsNullOrWhiteSpace(p) && string.IsNullOrWhiteSpace(t))
-                continue; // ligne vide
+                continue; // ligne vide (ni infos ni e-mail exploitable)
 
-            result.Add((n, p, Helpers.PhoneFormatter.Format(t)));
+            result.Add((n, p, Helpers.PhoneFormatter.Format(t), mail));
         }
         return result;
     }

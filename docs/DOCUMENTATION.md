@@ -16,6 +16,8 @@ badminton, synchronisée avec **Google Contacts**, **Google Sheets** et **Gmail*
 - **Synchronisation deux sens** avec Google Contacts (création / modification / suppression).
 - **Synchronisations automatiques multiples** : plusieurs Google Sheets → plusieurs libellés,
   en parallèle, chacune sur son minuteur.
+- **Historique des activités** : journal local par compte (ajouts, modifs, suppressions,
+  associations, dissociations).
 - **Hors ligne** : l'application reste utilisable ; seules les actions Google nécessitent Internet.
 
 ---
@@ -32,44 +34,46 @@ badminton, synchronisée avec **Google Contacts**, **Google Sheets** et **Gmail*
 ```
 BadmintonClub.csproj        Projet, dépendances, icône, version
 App.xaml(.cs)               Ressources/styles globaux, convertisseurs, gestion d'exceptions
-MainWindow.xaml(.cs)        Coquille : connexion, menu latéral, header (cloche de synchro), navigation, timer 1 s
+MainWindow.xaml(.cs)        Coquille : connexion, menu latéral, header (synchro + cloche), navigation, timer 1 s
 app.manifest               DPI-aware
 assets/app.ico             Icône de l'application
 
 Models/                    Objets de données (POCO + INotifyPropertyChanged)
-  Adherent.cs              Adhérent (Id, Nom, Prenom, Telephone, Email, DateInscription,
-                           GoogleResourceName, IsSelected)
+  Adherent.cs              Adhérent (Id, Nom, Prenom, Telephone, Email, DateInscription, GoogleResourceName…)
   AppSettings.cs           Paramètres persistés (navigateur, compte, liste des synchros…)
-  AutoSyncConfig.cs        Une synchro auto (Sheet → libellé) + état d'exécution (minuteur, %, en cours)
+  AutoSyncConfig.cs        Une synchro auto (Sheet → libellé) + état runtime (minuteur, %, alertes, trace)
   LabelItem.cs             Libellé (Nom, ResourceName, NombreMembres, IsSelected)
   SheetRecord.cs           Classeur listé (id, nom, url, date, IsSelected)
+  PendingPerson.cs         Inscription incomplète (nom/prénom/tél + e-mail brut manquant/mal formé)
+  SyncTraceEntry.cs        Personne associée par une synchro (ViaKnown = via l'option « connues »)
+  ActivityEntry.cs         Une entrée de l'historique (catégorie, action, date, cible, ancien/nouveau + instantané contact)
   CheckOption.cs           Option cochable générique (utilisée par le select2)
 
 Services/                  Logique métier et accès Google
-  AppServices.cs           Conteneur partagé : settings, repos, cache libellés, synchro
-                           contacts, moteur multi-synchros, compte courant
-  AppPaths.cs              Chemins des dossiers/fichiers (par compte, modèles, mails…)
+  AppServices.cs           Conteneur partagé : settings, repos, cache libellés, synchro contacts,
+                           moteur multi-synchros, compte courant, historique (LogActivity/LogContactActivity)
+  AppPaths.cs              Chemins des dossiers/fichiers (par compte, modèles, mails, activité, Téléchargements)
   GoogleAuth.cs            OAuth2 (récepteur loopback, scopes unifiés, déconnexion)
-  GoogleContactsService.cs People API : contacts, libellés, membres, appartenances
-  GoogleSheetsService.cs   Sheets/Drive : création, partage, export CSV, lecture de plage
+  GoogleContactsService.cs People API : contacts, libellés, membres, appartenances (dont SetContactMembershipsAsync)
+  GoogleSheetsService.cs   Sheets/Drive : création, partage, export CSV/XLSX, renommage, lecture de plage, existence
   GoogleErrors.cs          Traduction des erreurs Google en messages FR
-  GoogleSyncException.cs   Exception métier
   AdherentRepository.cs    Lecture/écriture adherents.json
   SheetRepository.cs       Lecture/écriture worksheets.json
+  ActivityRepository.cs    Lecture/écriture activity.json (historique, enums en texte)
   SettingsService.cs       Lecture/écriture settings.json (+ seed config.json)
   BrowserService.cs        Détection navigateurs, ouverture liens, Gmail compose
-  CsvContactImporter.cs    CSV/Excel → adhérents : lecture, détection d'en-têtes, mapping par
-                           lettre de colonne, vérification (« Tester »), conversions lettre↔index
+  CsvContactImporter.cs    CSV/Excel → adhérents : mapping par lettre, détection d'en-têtes, incomplets, conversions
   ExcelContactImporter.cs  Lecture d'un .xlsx (ClosedXML) → lignes → CsvContactImporter
   CsvContactExporter.cs    Export adhérents → CSV
-  EmailValidator.cs        Validation + correction d'e-mails
+  EmailValidator.cs        Validation + correction d'e-mails (Suggest, IsValidOrFixable)
+  PendingMatcher.cs        Niveau de correspondance (Connue/Doute/Inconnue) d'une inscription incomplète
+  ErrorLogger.cs           Journalise les plantages dans log_error.txt
   EmlParser.cs             Analyse d'un .eml (objet + corps)
   MailTemplateStore.cs     Modèles de mail (un JSON par modèle)
   UpdateService.cs         Vérification de nouvelle version (GitHub Releases)
 
-Controls/                  Contrôles réutilisables
-  MultiSelectComboBox      « select2 » : recherche, cases à cocher (multi) OU liste simple
-                           (mode SingleSelect), focus auto sur la recherche à l'ouverture
+Controls/
+  MultiSelectComboBox      « select2 » : recherche, cases (multi) ou liste simple (SingleSelect), focus auto
   SearchBox                Champ de recherche arrondi avec croix d'effacement
 
 Helpers/
@@ -79,34 +83,44 @@ Helpers/
 
 Converters/
   PhoneConverters.cs       Téléphone formaté + couleur rouge si invalide
-  SyncConverters.cs        État de synchro → vert/rouge, textes « En marche/Arrêté »,
-                           « ▶ Démarrer/⏸ Arrêter », bool → Visibility
+  SyncConverters.cs        État synchro → vert/rouge/textes, bool → Visibility, niveau de correspondance
+                           → couleur/texte, ActionBrush (couleur d'action d'historique)
 
 Views/                     Écrans (UserControl) et fenêtres (Window)
+  … + fenêtres partagées : PickLabelsWindow (select2 multi générique), LabelListWindow (puces libellés),
+    SyncWarningWindow (alertes synchro), SyncTraceWindow (trace synchro), PendingMatchWindow (correspondances),
+    ContactDetailsWindow (détails figés d'un contact), ConfirmWindow (confirmations stylées)
 ```
 
 ### 2.3 Navigation
 `MainWindow` héberge un menu latéral (RadioButtons) et un `ContentControl`. Les pages sont des
 `UserControl` instanciés une fois puis affichés par échange de contenu avec animation.
-Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Synchro auto, Paramètres**.
+Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Synchro auto, Historique, Paramètres**.
+La page **Inscriptions non finalisées** (`PendingView`) existe aussi mais son entrée de menu est
+**masquée** : on y accède via le bouton de la page **Association** (§8bis) ou le lien de la cloche (§11.4).
 
 Chaque page peut implémenter `IActivableView.OnActivated()` (rafraîchissement à l'affichage).
+
+Un **class handler global** (`App.xaml.cs`) désélectionne la cellule de tout DataGrid dès qu'il perd
+le focus clavier. Sa remontée d'arbre gère les `ContentElement` (ex. `Hyperlink`) via l'arbre logique
+(sinon `VisualTreeHelper.GetParent` lève « n'est pas un objet Visual »).
 
 ### 2.4 État partagé (`AppServices`)
 Instance unique passée à toutes les vues. Contient :
 - `Settings`, `SettingsService`, `Contacts`, `Sheets`, repositories, `Adherents` (collection observable),
 - le **compte courant**, le **cache des libellés** (+ événement `LabelsChanged`),
-- la collection observable **`AutoSyncs`** et le **moteur de synchros** (voir §11).
+- la collection **`AutoSyncs`** et le **moteur de synchros** (§11),
+- la collection **`Pending`** (inscriptions incomplètes, reconstruite à chaque synchro),
+- la collection **`Activities`** (historique) + `LogActivity(...)` / `LogContactActivity(...)`.
+- `GetLabelsAsync(forceRefresh)` rafraîchit le cache et appelle `ReconcileLabelNames()` : les noms de
+  libellés mémorisés dans les synchros et les inscriptions en attente sont réalignés (fix renommage).
 
 ### 2.5 Boucle temps réel (timer 1 s)
 `MainWindow` fait tourner un unique `DispatcherTimer` (1 s) qui, tant que l'appli est visible :
 - affiche/masque la **bannière hors ligne** ;
-- appelle `AppServices.TouchSyncs()` → rafraîchit minuteurs / états / pourcentages (bindings) ;
-- si en ligne, appelle `AppServices.RunDueSyncs()` → lance les synchros échues (concurrentes) ;
-- met à jour la **cloche 🔔** (nombre de synchros en marche).
-
-Il n'y a **plus** de timer 5 min dédié : chaque synchro porte son propre `NextRun` et est
-déclenchée par ce tick lorsqu'elle est due.
+- appelle `AppServices.TouchSyncs()` → rafraîchit minuteurs / états / pourcentages ;
+- si en ligne, appelle `AppServices.RunDueSyncs()` → lance les synchros **complètes** échues (concurrentes) ;
+- met à jour l'icône **🔄** (nombre de synchros en marche + pastille jaune d'alerte).
 
 ---
 
@@ -115,254 +129,237 @@ déclenchée par ce tick lorsqu'elle est due.
 Racine : `%LOCALAPPDATA%\BadmintonClub\`
 ```
 settings.json                    Paramètres globaux (dont la liste des synchros auto)
+log_error.txt                    Journal des plantages (diagnostic)
 google_token/                    Jetons OAuth (par « user »)
 accounts/<email>/adherents.json  Adhérents du compte
 accounts/<email>/worksheets.json Registre des Sheets créés par le compte
+accounts/<email>/activity.json   Historique des activités du compte
 modeles/                         Modèles de Sheets (Excel/CSV)
 mails/                           Modèles de mail (.json : nom, objet, corps)
 ```
-Le compte « par défaut » (avant connexion) conserve les anciens `adherents.json` /
-`worksheets.json` à la racine (rétro-compatibilité + migration à la 1re connexion).
-
-**Structure d'un adhérent** :
-```json
-{ "Id": "guid", "Nom": "", "Prenom": "", "Telephone": "", "Email": "",
-  "DateInscription": "2026-01-01T00:00:00", "GoogleResourceName": "people/…" }
-```
-
-**Structure d'une synchro auto** (dans `settings.json`, tableau `AutoSyncs`) :
-```json
-{ "Id": "guid", "Name": "Adultes 2026", "SheetUrl": "https://docs.google.com/…",
-  "LabelResourceName": "contactGroups/…", "LabelName": "Adultes",
-  "StartRow": 5, "EndRow": 110,
-  "ColNom": "B", "ColPrenom": "C", "ColTel": "D", "ColEmail": "E",
-  "Enabled": true }
-```
-Le minuteur, le pourcentage et l'indicateur « en cours » ne sont **pas** sérialisés (état runtime).
+Le compte « par défaut » (avant connexion) conserve les fichiers à la racine (rétro-compat + migration).
 
 ---
 
 ## 4. Intégration Google (OAuth & scopes)
 
-- **Fichier requis** : `client_secret.json` (identifiants OAuth « Application de bureau »)
-  à côté de l'exécutable.
-- **Autorisation unique partagée** (`GoogleAuth.AllScopes`, clé `user-badminton`) :
-  `contacts`, `userinfo.email`, `userinfo.profile`, `spreadsheets`, `drive`.
-  → **un seul écran de consentement**, un seul jeton pour toute l'appli.
-- **Récepteur loopback** maison : ouvre le navigateur via ShellExecute (évite la troncature
-  d'URL sur `&`), sur `http://127.0.0.1:<port>/authorize/`. Connexion **annulable**.
-- **Mode Test Google** : chaque compte doit être ajouté comme **utilisateur de test** dans la
-  console Google Cloud ; les jetons expirent ~7 jours (reconnexion périodique).
+- **Fichier requis** : `client_secret.json` (identifiants OAuth « Application de bureau »).
+- **Autorisation unique partagée** (`GoogleAuth.AllScopes`) : `contacts`, `userinfo.email`,
+  `userinfo.profile`, `spreadsheets`, `drive` → un seul écran de consentement, un seul jeton.
+- **Récepteur loopback** maison (ShellExecute, `http://127.0.0.1:<port>/authorize/`). Connexion annulable.
+- **Mode Test Google** : chaque compte doit être **utilisateur de test** ; jetons ~7 jours.
 
 ---
 
 ## 5. Connexion / comptes
 
-- **Démarrage** : si un jeton existe → connexion silencieuse ; sinon → **écran de connexion**.
-- **Se connecter** : force le choix du compte + consentement complet. Bouton **Annuler** pendant l'attente.
-- **Se déconnecter** (menu) : supprime les jetons → retour à l'écran de connexion.
-- **Changer de compte** = se déconnecter puis se reconnecter avec un autre compte.
-- **Isolation** : à chaque connexion, les vues sont réinitialisées et les données rebasculées
-  sur le dossier du compte. Migration des données « par défaut » uniquement au tout premier compte.
+- **Démarrage** : jeton présent → connexion silencieuse ; sinon → écran de connexion.
+- **Se connecter / déconnecter** : gère le choix du compte et l'isolation des données par compte.
+- **Isolation** : à chaque connexion les vues sont réinitialisées et les dépôts (adhérents, sheets,
+  activité) rebasculés sur le dossier du compte.
 
 ---
 
 ## 6. Page **Contacts**
 
-Tableau : sélection (case), Nom, Prénom, **Téléphone** (formaté, rouge si invalide), **E-mail**
-(lien cliquable → Gmail), Actions.
+Tableau paginé : sélection, Nom, Prénom, **Téléphone** (formaté, rouge si invalide), **E-mail**
+(lien Gmail), **Ajouté le** (`DateInscription`), Actions (✏ Modifier / 🏷 Libellés / 🗑 Supprimer).
 
-**Filtres (barre compacte)** :
-- **Recherche** (nom / prénom / téléphone / e-mail) avec croix d'effacement.
-- **Filtre par libellé** (multiselect) incluant l'option **« (Sans libellé) »**. Croix pour vider.
-- Le **compteur** indique « X sur Y » quand un filtre est actif ; message **« Aucun résultat »**
-  au centre du tableau si le filtrage ne renvoie rien.
-
-**Actions par ligne** : **✏ Modifier** (vert), **🗑 Supprimer** (rouge), **🏷 Libellés** (bleu).
-- *Modifier* : formulaire (prénom/nom obligatoires, e-mail validé, téléphone reformaté) →
-  mise à jour + **push Google** immédiat.
-- *Supprimer* : confirmation stylée → suppression **locale + Google Contacts**.
-- *Libellés* : modal listant les libellés, cochés = appartenances ; **Valider** applique les
-  ajouts/retraits d'un coup (libellés issus du **cache**, sans rechargement réseau).
-
-**Actions groupées** : cases à cocher + « tout sélectionner » (sur le filtrage affiché) + barre
-rouge **« Supprimer (N) »** animée.
-
-**Ajouter** : formulaire + choix de **libellés à associer** à la création. Push Google.
-
-**Importer** : modal à 2 modes (voir §12 pour le détail des colonnes/dropzone).
-
-**Exporter CSV** (bouton vert « Excel ») : exporte **le filtrage affiché** (ou la sélection cochée).
+- **Pagination** : 20 / 50 / 100 par page ; tri par en-tête ; copie de cellule (Ctrl+C).
+- **Filtres (barre)** : recherche, **filtre par libellé** (multiselect + « (Sans libellé) »),
+  case **« Masquer les contacts sans nom / prénom / tél »**, bouton **🔎 Recherche avancée**.
+- **Recherche avancée** (panneau dépliable) :
+  - **Filtre par période d'ajout** (Du / Au sur `DateInscription`, bornes incluses, ✕ pour effacer) ;
+  - bascule **🔁 Doublons** : n'affiche que les **homonymes** (même nom + prénom présents ≥ 2 fois).
+- **Modifier** : formulaire → mise à jour + push Google immédiat (journalisé, ancien/nouveau).
+- **Libellés** : modale `ManageLabelsWindow` (cases) → applique l'ensemble voulu **en un seul appel**
+  (`SetContactMembershipsAsync`, voir §13) + journalise associations/dissociations.
+- **Ajouter / Supprimer** : formulaire / confirmation stylée ; push Google immédiat ; journalisés.
+- **Importer** : modale à 2 modes (§12). À la fin, un **message box** résume l'import :
+  « Tout s'est bien passé » ou **avertissement** listant les **e-mails en double** et les **personnes
+  aux infos incomplètes** (non importées). Ajouts/modifs/associations journalisés (« Import manuel »).
+- **Exporter CSV** (bouton vert) : exporte le filtrage affiché (ou la sélection).
 
 ---
 
 ## 7. Page **Libellés**
 
-Un « libellé » = un **groupe de contacts Google**. Tableau : sélection, Libellé, Membres, Actions.
-
-- **➕ Créer un libellé** : saisie du nom (chargement).
-- Par ligne : **👁 Voir** (→ page Association du libellé), **✏ Renommer**, **🗑 Supprimer**
-  (le contact reste, seul le libellé est retiré).
-- **Suppression groupée** + « tout sélectionner » ; **double-clic** → page Association.
-- Toute modification rafraîchit le **cache des libellés** (`LabelsChanged`) → mise à jour en direct
-  des filtres et listes ailleurs.
-- **Tri** : les libellés sont classés par **ordre alphabétique inverse (Z→A)** dans toutes les
-  listes déroulantes.
+Un « libellé » = un **groupe de contacts Google** (`USER_CONTACT_GROUP` uniquement). Créer / Voir /
+Renommer / Supprimer (+ suppression groupée). Toute modif rafraîchit le **cache** (`LabelsChanged`).
+Création, renommage (ancien→nouveau) et suppression sont **journalisés**.
 
 ---
 
 ## 8. Page **Association**
 
-- **Sélecteur de libellé en select2 à choix unique** (recherche, pas de cases à cocher) +
-  bouton **👥 Associer** + **recherche** dans le tableau.
-- Tant qu'aucun libellé n'est choisi, le tableau affiche **« 👆 Sélectionnez un libellé… »**
-  (évite de croire qu'il n'y a aucune association).
-- Tableau des **membres** du libellé : sélection, Nom, Prénom, Téléphone, E-mail (→ Gmail), Action.
-- **✂ Dissocier** par ligne (**confirmation** « Dissocier X du libellé « Y » ? ») ou
-  **sélection multiple + « ✂ Dissocier (N) »** (contact **non supprimé**, juste retiré du libellé).
-- **👥 Associer** : modal (adhérents **non déjà associés** au libellé) → ajoute les cochés.
-- Sélection **isolée** de la page Contacts (wrapper interne `MemberRow`).
+Vue centrée sur les **personnes**, avec gestion fine des libellés.
+
+- **Filtre par libellé en multi-sélection** : aucune sélection = **toutes** les personnes ; sinon
+  **union** des membres des libellés cochés.
+- **🔎 Recherche avancée** (panneau) : trois listes select2 combinées —
+  - **A au moins un de** (OU, filtre principal),
+  - **A TOUS ces libellés** (ET : présent dans chaque libellé simultanément),
+  - **N'a AUCUN de ces libellés** (exclusion).
+  Les listes **s'adaptent** : un libellé choisi en exclusion disparaît des listes d'inclusion et
+  inversement. Filtrage par e-mail des membres (cache de session `_memberEmailsCache`).
+- **Actions par ligne** : **👁 Voir** (fenêtre stylée `LabelListWindow` listant les libellés utilisateur
+  de la personne) et **🏷 Gérer** (`PickLabelsWindow` : select2 multi pré-coché → applique l'ensemble
+  voulu en un seul appel).
+- **Sélection multiple** : barre avec **👥 Associer (N)** et **✂ Dissocier (N)**, chacune ouvrant une
+  `PickLabelsWindow` pour choisir les libellés à ajouter/retirer aux personnes cochées.
+- **⏳ Inscriptions non finalisées** : actif quand exactement un libellé est sélectionné ; ouvre §8bis pré-filtré.
+- Toutes les associations/dissociations sont **journalisées** (instantané du contact figé).
+
+---
+
+## 8bis. Page **Inscriptions non finalisées** (`PendingView`)
+
+**Lecture seule** (l'appli n'écrit jamais dans le Sheet). Liste les personnes d'un Sheet synchronisé
+ayant renseigné des infos (nom/prénom/tél) mais dont l'**e-mail est manquant OU au mauvais format non
+rattrapable** (une faute rattrapable — virgule→point, espaces — devient un contact normal). Reconstruite
+à chaque synchro.
+
+- **Accès** : bouton de la page Association, ou lien de la cloche (§11.4). Entrée de menu masquée.
+- **Colonne E-mail** : **« mail non renseigné »** en rouge si vide, sinon l'adresse en **jaune** +
+  « (format incorrect) ».
+- **Colonne Correspondance** (`PendingMatcher`) : ● Connue (vert) / ● Doute (jaune) / ● Inconnue (rouge).
+- **Filtres** : recherche (nom/prénom/tél/e-mail), par libellé, par niveau de correspondance.
+- **👁 Correspondances** : modale lecture seule (`PendingMatchWindow`).
+- **✔ Valider** (par ligne) et **✔ Valider (N)** (groupé) : retire de la liste, avec **confirmation**
+  rappelant de compléter l'info dans le Sheet (sinon réapparition à la synchro suivante). Boutons en logos.
 
 ---
 
 ## 9. Page **E-mail**
 
-- **Multiselect des libellés destinataires**.
-- **🗂 Gérer les modèles** : modal listant les modèles (Modifier / Supprimer) + **➕ Ajouter**.
-  - **Éditeur de modèle** : **zone de dépôt `.eml`** (glisser un e-mail téléchargé → objet + corps
-    extraits — RFC 2047, multipart, quoted-printable, base64) + champs éditables + **Enregistrer**.
-    La dropzone passe **au vert** si le fichier est bien lu, **au rouge** si le format est refusé.
-  - Modèles stockés dans `…\mails`.
-- **✈ Écrire un mail** : modal de choix **« Mail vierge »** ou **« À partir d'un modèle enregistré »**.
-  Le sélecteur de modèle est un **select2 à choix unique** qui n'apparaît que si l'option modèle est
-  cochée. L'appli récupère l'**union** des membres des libellés sélectionnés et ouvre **Gmail** en
-  composition (destinataires + objet/corps du modèle le cas échéant).
+Multiselect des libellés destinataires ; **🗂 Gérer les modèles** (zone de dépôt `.eml`) ;
+**✈ Écrire un mail** (vierge ou à partir d'un modèle) → ouvre Gmail en composition.
 
 ---
 
 ## 10. Page **Google Sheets**
 
-Liste **tous les classeurs accessibles** au compte (les tiens **et** ceux partagés avec toi).
-
-- **Filtres** : recherche par nom (croix) + **période** (DatePickers **Du / Au** stylés).
-- **➕ Créer un Sheet** : nom + **radios** *Classeur vierge* / *À partir d'un modèle* (glisser un
-  Excel/CSV — dropzone colorée vert/rouge selon le format ; ouvre par défaut le dossier `modeles`)
-  + **⚙ Paramètres de partage** (accessible par lien + rôle Lecteur/Commentateur/Éditeur).
-  Le clone = téléversement + conversion Drive (mise en forme préservée).
-- Par ligne : **🔗 Ouvrir**, **📋 Copier le lien**, **⚙ Options** (partage, **⬇ Télécharger CSV**,
-  **⭐ Enregistrer comme modèle**), **🗑 Supprimer**.
-- **Sélection multiple + suppression groupée**.
-
-> La configuration des imports automatiques n'est **plus** ici : elle a sa propre page (§11).
+Liste tous les classeurs accessibles. Filtres : recherche + **période** (Du / Au + ✕ pour effacer).
+- **➕ Créer un Sheet** (vierge / à partir d'un modèle + partage).
+- Par ligne : 🔗 Ouvrir, 📋 Copier, ✏ Renommer (Drive), ⚙ Options, 🗑 Supprimer. Suppression groupée.
+- **⚙ Options** : partage, **⬇ Télécharger CSV** (dialogue ouvert sur le dossier **Téléchargements**,
+  `AppPaths.DownloadsFolder`), **⭐ Enregistrer comme modèle** (.xlsx dans `modeles`).
+- Création / renommage / suppression **journalisés** (catégorie Sheet).
 
 ---
 
 ## 11. Page **Synchro auto** (multi-synchros)
 
-Remplace l'ancien import auto unique. Permet **plusieurs synchros en parallèle**, chacune reliant
-**un Google Sheet à un libellé cible**.
+Plusieurs synchros reliant chacune **un Google Sheet à un libellé cible**.
 
 ### 11.1 Règles
-- Plusieurs synchros peuvent tourner **en même temps** (exécution concurrente et coopérative sur le
-  thread UI, aux points `await`).
-- **Un libellé ne peut être ciblé que par une seule synchro** (unicité validée à l'enregistrement,
-  `AppServices.IsLabelInUse`).
-- Chaque synchro s'exécute **immédiatement** quand on l'active, puis **toutes les 5 minutes**
-  (`AutoSyncInterval`).
+- Exécution concurrente coopérative sur le thread UI ; **un libellé = une seule synchro** (unicité).
+- Chaque synchro **complète** s'exécute immédiatement à l'activation puis toutes les 5 min.
+- **Brouillon** : une synchro peut être enregistrée **incomplète** (champs manquants). Elle n'est
+  **pas lançable** tant qu'elle n'a pas nom + lien du Sheet + libellé + colonne e-mail
+  (`AutoSyncConfig.IsComplete`) ; sa ligne est affichée en **orange**. `RunDueSyncs`/`StartSync`
+  ignorent les synchros incomplètes.
+- Une synchro **en cours d'exécution** ne peut pas être modifiée.
 
 ### 11.2 Tableau
-Colonnes : **Nom · Libellé cible · Lien (cliquable) · État · Minuteur · Actions**.
-- **État** : ● **vert « En marche »** ou ● **rouge « Arrêté »** ; pendant un import, **⟳ animé + %**.
-- **Minuteur** : compte à rebours `MM:SS` avant la prochaine exécution (ou « en cours… »).
-- **Actions** : **▶ Démarrer / ⏸ Arrêter**, **✏ Modifier**, **🗑 Supprimer**.
-- **Double-clic** sur une ligne → modale de modification.
-- **Recherche par nom** en haut de la page (filtre live).
+Colonnes : **Nom · Libellé cible · Lien · État · Minuteur · Suivi · Actions**.
+- **Suivi** : bouton **📋 Trace** (bleu, si trace) + bouton **⚠ Alerte** (jaune, si alertes).
+- **Actions** : ▶ Démarrer / ⏸ Arrêter, ✏ Modifier, 🗑 Supprimer. Double-clic → modale.
 
 ### 11.3 Modale d'ajout/édition (`AutoSyncEditWindow`)
-Mélange de l'ancien écran de réglages et de l'ancienne modale d'import :
-Nom · **Lien du Sheet** · **Libellé cible (select2 à choix unique)** · **lignes début/fin** ·
-**colonnes** (Nom/Prénom/Tél/E-mail) · **✨ Remplissage automatique** · **🔍 Tester** · **Activer**.
-- **Remplissage automatique** : lit l'en-tête du Sheet et remplit les lettres de colonnes
-  (vert = 4 trouvées, orange = partiel, rouge = aucune).
-- **Tester** : lit les lignes avec les colonnes indiquées et affiche un **verdict ✔ vert / ✘ rouge**
-  + un exemple réellement lu.
+Nom · **Lien du Sheet** (+ bouton **🔎 Vérifier** : teste l'existence via `SheetExistsAsync`, colore le
+contour du champ vert/rouge) · **Libellé cible** (select2) · lignes début/fin · colonnes ·
+**✨ Remplissage automatique** · **🔍 Tester** · **☑ Associer automatiquement les personnes « connues »** ·
+**Activer**.
+- À l'enregistrement, un **lien renseigné mais inexistant** bloque la sauvegarde (vérifié en ligne) ;
+  un lien vide est autorisé (brouillon).
 
-### 11.4 Cloche de notification (header)
-Bouton **🔔** avec **pastille verte = nombre de synchros en marche**. Au clic, un popup liste les
-synchros actives (**nom + minuteur + ⟳ + %**) avec un bouton **Suspendre** par ligne (la synchro
-disparaît alors de la liste).
+### 11.4 Icône synchro & cloche (header)
+- **🔄** = zone notifications ; **pastille verte** = nombre de synchros en marche ; **pastille jaune ⚠**
+  si au moins une synchro active a des inscriptions non finalisées.
+- Popup : par synchro, **⟳** (synchro immédiate de cette ligne) + **⏸** (suspendre), un **⚠** et un lien
+  **« Voir les inscriptions non finalisées »** (page §8bis pré-filtrée sur son libellé) si elle a des incomplets.
+  La flèche du minuteur tourne en continu (animation).
 
-### 11.5 Moteur (`AppServices`)
-- `AutoSyncs` (ObservableCollection) chargée depuis/écrite dans `settings.json`.
-- `RunDueSyncs()` (appelé chaque seconde si en ligne) lance `RunSyncNowAsync(config)` pour chaque
-  synchro **activée, non en cours, échue**. Un garde `IsImporting` empêche tout double lancement.
-- `ImportConfigAsync(config)` : lit les lignes (`A{début}:Z{fin}`), mappe les colonnes par lettre,
-  fait l'**upsert par e-mail**, pousse vers Google **uniquement les vraies différences** (comparaison
-  au contact Google réel), associe au **libellé cible** (ajout des manquants) et **dissocie** les
-  membres absents du fichier. La **progression** (0→100 %) est publiée pendant la poussée Google.
-
-### 11.6 Lecture du Sheet & colonnes (partagé)
-- La plage lue est reconstruite en `A{début}:Z{fin}` : on lit **toutes les colonnes** et on prend
-  chaque champ à sa **lettre absolue** → les colonnes **non adjacentes** fonctionnent.
-- `CsvContactImporter` fournit : lecture, `DetectColumns` (repère l'en-tête), `BuildFromColumns`
-  (mapping par lettre, ne garde que les lignes dont la colonne e-mail contient un `@`),
-  `CheckColumns`/`BuildCheckMessage` (le « Tester »), `SliceRows`, et les conversions
-  **lettre ↔ index** de colonne.
+### 11.5 Moteur (`AppServices.ImportConfigAsync`)
+- Lit les lignes (`A{début}:Z{fin}`), mappe par lettre, corrige les e-mails rattrapables, **upsert par
+  e-mail**, pousse vers Google les vraies différences, **associe** au libellé cible (ajout des manquants)
+  et **dissocie** les membres absents du Sheet.
+- **Inscriptions incomplètes** : e-mail manquant ou mal formé non rattrapable → `Pending` (§8bis).
+- **Option « connues »** : une personne sans e-mail exploitable mais correspondant de façon **certaine**
+  (`MatchLevel.Connue` : ≥ 2 champs, un **seul** contact, avec e-mail valide) est associée via ce contact
+  et retirée des non finalisés. En cas de doute, elle y reste. **Aucune écriture dans le Sheet.**
+- **Doublons d'e-mail** : personnes ayant saisi le même e-mail valide plusieurs fois → associées quand
+  même, mais signalées.
+- **Alertes** (`SyncWarningWindow`) : bouton ⚠ → liste infos manquantes + doublons, filtre par type,
+  lien vers §8bis pré-filtré.
+- **Trace** (`SyncTraceWindow`) : personnes associées au libellé lors de la dernière exécution ; lignes
+  **jaunes** = passées uniquement grâce à l'option « connues ».
+- Ajouts / modifications / associations / dissociations sont **journalisés** (« Synchro auto « Nom » »),
+  uniquement sur de vraies actions (pas de spam en régime stable).
 
 ---
 
 ## 12. Import de contacts (modale, page Contacts)
 
-Deux modes, choisis par radio :
-- **Depuis un fichier (Excel/CSV)** : glisser-déposer ou parcourir.
-  - La **dropzone se colore** : neutre + **barre de chargement** pendant la lecture (en tâche de
-    fond), **vert + nom du fichier** si valide, **rouge** si format refusé/illisible.
-  - Un panneau **« lignes lues » + « colonnes »** apparaît une fois le fichier chargé, avec
-    **✨ Remplissage automatique** (pré-rempli au dépôt) et **🔍 Tester** (verdict vert/rouge).
-  - À l'import : si des colonnes sont renseignées, mapping par lettre sur la plage de lignes ;
-    sinon repli sur la **détection automatique par en-têtes**.
-- **Coller des e-mails** : une adresse par ligne.
-
-Commun : **libellés cibles** (multiselect) ; **vérification des e-mails** (adresses douteuses listées
-avec **correction proposée**) ; **upsert par e-mail** ; push Google avec barre de progression.
+Deux modes : **fichier Excel/CSV** (dropzone colorée + mapping par colonnes ou détection d'en-têtes) ou
+**coller des e-mails**. Commun : libellés cibles, vérification/correction des e-mails, **upsert par e-mail**,
+push Google avec progression. La modale expose aussi les **doublons** et **personnes incomplètes** pour le
+message de bilan (§6).
 
 ---
 
-## 13. Synchronisation Contacts (deux sens, au lancement)
+## 13. Synchronisation Contacts & appartenances
 
-`AppServices.SyncContactsAsync` réconcilie la liste locale avec Google :
-- contact lié absent en ligne → **supprimé localement** (suppression Gmail répercutée) ;
-- contact lié présent → **champs mis à jour** depuis Google ;
-- contact local non lié → **rapproché par e-mail**, sinon **poussé** vers Google ;
-- contact Google non présent localement → **ajouté**.
+`AppServices.SyncContactsAsync` (au lancement) réconcilie la liste locale avec Google (suppressions,
+mises à jour, rapprochement par e-mail, ajouts). **App → Google** immédiat pour ajout/modif/suppression ;
+**Google → App** au lancement.
 
-**App → Google immédiat** : ajout, modification (✏) et suppression (🗑) se répercutent tout de suite.
-**Google → App** : au **lancement** (relancer l'appli pour voir un changement fait dans Gmail).
-
-**Hors ligne** : bannière d'avertissement dans le header ; les synchros auto sont **en pause**
-jusqu'au retour d'Internet.
-
----
-
-## 14. Divers
-
-- **Téléphone** : reformaté « 06 12 34 56 78 » (0 en tête, espaces), **rouge** si invalide malgré la
-  correction (vide = ignoré) ; comparé « chiffres seuls » pour éviter les faux écarts de format.
-- **select2** (`MultiSelectComboBox`) : recherche, mode multi (cases) ou **single** (liste simple),
-  message **« Aucun résultat »** en recherche vide, **focus automatique** sur la recherche à l'ouverture.
-- **Confirmations** : boîte de dialogue **stylée** (icône, message, boutons colorés) pour toutes les
-  suppressions/dissociations.
-- **Navigateur** : seul paramètre de la page **Paramètres** — navigateur pour ouvrir Sheets/Gmail/connexion.
-- **Mise à jour** : à la connexion, comparaison avec la dernière **Release GitHub** ; proposition de télécharger.
-- **Version** affichée dans le menu latéral et sur l'écran de connexion.
+**Appartenances (libellés) — appel atomique.** Pour fixer les libellés d'un contact,
+`GoogleContactsService.SetContactMembershipsAsync` remplace **toute** la liste d'appartenances en **un seul**
+`updateContact` (au lieu de plusieurs `members.modify` successifs, qui pouvaient perdre une modification —
+dernier libellé non dissocié — à cause de la cohérence à terme de l'API). Les groupes **système** sont
+conservés et **`contactGroups/myContacts` est toujours garanti** : l'API refuse qu'un contact n'appartienne
+à **aucun** groupe (« Contact must always be in at least one contact group »).
 
 ---
 
-## 15. Gestion des erreurs Google (courantes)
+## 14. Historique des activités (page **Historique**)
+
+Journal local **par compte** (`activity.json`, 3000 entrées max, le plus récent en tête).
+
+- **Actions journalisées** : Ajout, Modification (avec **ancienne/nouvelle valeur**), Suppression,
+  Association, Dissociation — depuis les actions manuelles, la modale « Libellés », l'import manuel et
+  la synchro auto.
+- **Trois tableaux** choisis par **radios** : **Utilisateurs**, **Libellés**, **Sheets**.
+- **Filtres** : par **action** (combo), par **période** (Du / Au), et par **cible** (champ texte).
+- Colonnes : **Date · Action** (colorée via `ActionBrush`) **· Cible · Détails · Ancienne · Nouvelle valeur**.
+- **Détails contact** : bouton **👁** dans la colonne Cible (entrées Utilisateur) → fenêtre stylée
+  `ContactDetailsWindow` affichant **Nom / Prénom / Téléphone / E-mail**. Ces infos sont un **instantané
+  figé au moment de l'action** (champs `Target*` de `ActivityEntry`) : elles restent exactes même si le
+  contact est ensuite modifié ou supprimé. (Les entrées créées avant cette évolution n'ont pas d'instantané.)
+
+---
+
+## 15. Divers
+
+- **Téléphone** : reformaté « 06 12 34 56 78 », rouge si invalide ; comparé « chiffres seuls ».
+- **select2** (`MultiSelectComboBox`) : recherche, multi/simple, focus auto ; `SetOptions` ne relève pas
+  l'événement de sélection (pas de récursion lors des adaptations de listes).
+- **Confirmations** : `ConfirmWindow` stylée pour suppressions/dissociations.
+- **Tableaux** : sélection/copie par cellule (Ctrl+C), désélection au clic hors tableau, virtualisation, tri.
+- **Navigateur** : seul paramètre de la page **Paramètres**.
+- **Mise à jour** : comparaison avec la dernière Release GitHub à la connexion.
+- **Journal d'erreurs** : plantages non gérés → `log_error.txt` (via `ErrorLogger`).
+
+---
+
+## 16. Gestion des erreurs Google (courantes)
 
 | Message | Cause | Solution |
 |---|---|---|
 | `insufficient authentication scopes` | Permissions non toutes accordées | Se déconnecter/reconnecter en **cochant tout** |
-| `access_denied` (Accès bloqué) | Compte non testeur | Ajouter le compte en **Utilisateur de test** (console Google Cloud) |
+| `access_denied` (Accès bloqué) | Compte non testeur | Ajouter le compte en **Utilisateur de test** |
+| `Contact must always be in at least one contact group` | Retrait de la dernière appartenance | Géré : `myContacts` toujours garanti (§13) |
 | `People/Sheets/Drive API not enabled` | API non activée | Activer l'API dans le projet Google Cloud |
 | `client_secret.json introuvable` | Fichier manquant | Placer `client_secret.json` à côté de l'exe |

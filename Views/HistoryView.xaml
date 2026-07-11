@@ -1,0 +1,83 @@
+<UserControl x:Class="BadmintonClub.Views.HistoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:BadmintonClub.Controls">
+    <DockPanel Margin="24">
+
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock Text="Historique des activités" Style="{StaticResource PageTitle}" />
+            <TextBlock x:Name="CountText" Foreground="#777777" FontSize="12" Margin="0,2,0,0" />
+
+            <!-- Choix du tableau -->
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <RadioButton x:Name="RadioUsers" GroupName="Cat" Content="👥 Utilisateurs" IsChecked="True"
+                             VerticalContentAlignment="Center" Margin="0,0,18,0" Checked="Category_Changed" />
+                <RadioButton x:Name="RadioLabels" GroupName="Cat" Content="🏷 Libellés"
+                             VerticalContentAlignment="Center" Margin="0,0,18,0" Checked="Category_Changed" />
+                <RadioButton x:Name="RadioSheets" GroupName="Cat" Content="📄 Sheets"
+                             VerticalContentAlignment="Center" Checked="Category_Changed" />
+            </StackPanel>
+
+            <!-- Filtres -->
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center">
+                <TextBlock Text="Action :" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="#555555" FontWeight="SemiBold" />
+                <ComboBox x:Name="ActionCombo" Width="150" VerticalContentAlignment="Center"
+                          SelectionChanged="Filter_Changed">
+                    <ComboBoxItem IsSelected="True">Toutes</ComboBoxItem>
+                    <ComboBoxItem>Ajout</ComboBoxItem>
+                    <ComboBoxItem>Modification</ComboBoxItem>
+                    <ComboBoxItem>Suppression</ComboBoxItem>
+                    <ComboBoxItem>Association</ComboBoxItem>
+                    <ComboBoxItem>Dissociation</ComboBoxItem>
+                </ComboBox>
+                <TextBlock Text="Du" VerticalAlignment="Center" Margin="18,0,6,0" Foreground="#555555" />
+                <DatePicker x:Name="FromDate" Width="150" SelectedDateChanged="Filter_Changed" />
+                <TextBlock Text="Au" VerticalAlignment="Center" Margin="10,0,6,0" Foreground="#555555" />
+                <DatePicker x:Name="ToDate" Width="150" SelectedDateChanged="Filter_Changed" />
+                <Button x:Name="ClearDatesBtn" Content="✕" MinWidth="0" Padding="9,5" Margin="6,0,0,0"
+                        VerticalAlignment="Center" Click="ClearDates_Click" ToolTip="Effacer la période" />
+                <c:SearchBox x:Name="TargetSearch" Width="200" Margin="18,0,0,0" VerticalAlignment="Center"
+                             TextChanged="TargetSearch_Changed" PlaceholderText="Filtrer par cible…" />
+            </StackPanel>
+        </StackPanel>
+
+        <Grid>
+            <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
+                      CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
+                      SelectionUnit="Cell" ClipboardCopyMode="ExcludeHeader">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Date" Width="140"
+                                        Binding="{Binding Date, StringFormat=\{0:dd/MM/yyyy HH:mm\}}" />
+                    <DataGridTemplateColumn Header="Action" Width="120" SortMemberPath="Action">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Action}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                           Foreground="{Binding Action, Converter={StaticResource ActionBrush}}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Cible" Width="*" SortMemberPath="Target">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Target}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Button Content="👁" Click="Details_Click" ToolTip="Voir les détails du contact"
+                                            Style="{StaticResource RowButton}" FontSize="12" Margin="6,0,0,0"
+                                            Visibility="{Binding IsUser, Converter={StaticResource BoolToVisibility}}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Détails" Binding="{Binding Details}" Width="*" />
+                    <DataGridTextColumn Header="Ancienne valeur" Binding="{Binding OldValue}" Width="1.4*" />
+                    <DataGridTextColumn Header="Nouvelle valeur" Binding="{Binding NewValue}" Width="1.4*" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock x:Name="EmptyResults" Visibility="Collapsed" IsHitTestVisible="False"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Margin="0,40,0,0" Foreground="#999999" FontSize="13" />
+        </Grid>
+    </DockPanel>
+</UserControl>

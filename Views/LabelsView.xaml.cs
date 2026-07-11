@@ -148,10 +148,15 @@ public partial class LabelsView : UserControl, IActivableView
         });
 
         if (result.Failed > 0)
+        {
             Warn(result.LastError);
+        }
         else
+        {
+            _services.LogActivity(Models.ActivityCategory.Libelle, Models.ActivityAction.Ajout, dialog.Value);
             MessageBox.Show(owner, $"Libellé « {dialog.Value} » créé.", "Libellés",
                 MessageBoxButton.OK, MessageBoxImage.Information);
+        }
     }
 
     // ---- Voir les membres (page Association) ------------------------------
@@ -184,6 +189,7 @@ public partial class LabelsView : UserControl, IActivableView
             return;
 
         var owner = Window.GetWindow(this)!;
+        var oldName = label.Nom;
         var result = await ProgressRunner.RunBusyAsync(owner, "Renommage du libellé…", async () =>
         {
             await _services.Contacts.RenameLabelAsync(label.ResourceName, dialog.Value);
@@ -192,6 +198,9 @@ public partial class LabelsView : UserControl, IActivableView
 
         if (result.Failed > 0)
             Warn(result.LastError);
+        else
+            _services.LogActivity(Models.ActivityCategory.Libelle, Models.ActivityAction.Modification,
+                dialog.Value, "Renommage", oldName, dialog.Value);
     }
 
     private async void Supprimer_Click(object sender, RoutedEventArgs e)
@@ -226,6 +235,7 @@ public partial class LabelsView : UserControl, IActivableView
             async l =>
             {
                 await _services.Contacts.DeleteLabelAsync(l.ResourceName);
+                _services.LogActivity(Models.ActivityCategory.Libelle, Models.ActivityAction.Suppression, l.Nom);
                 l.PropertyChanged -= Label_PropertyChanged;
                 _labels.Remove(l);
             });

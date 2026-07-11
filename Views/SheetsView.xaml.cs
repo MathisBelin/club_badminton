@@ -87,6 +87,12 @@ public partial class SheetsView : UserControl, IActivableView
     private void Search_Changed(object sender, TextChangedEventArgs e) { _view?.Refresh(); UpdateCount(); }
     private void Date_Changed(object sender, SelectionChangedEventArgs e) { _view?.Refresh(); UpdateCount(); }
 
+    private void ClearDates_Click(object sender, RoutedEventArgs e)
+    {
+        FromDate.SelectedDate = null;
+        ToDate.SelectedDate = null; // déclenche Date_Changed → rafraîchit
+    }
+
     // ---- Sélection --------------------------------------------------------
 
     private void Sheet_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -181,8 +187,11 @@ public partial class SheetsView : UserControl, IActivableView
             return;
         }
 
+        var oldName = s.Nom;
         s.Nom = newName;                          // notifie la grille
         _services.SheetRepository.Save(_sheets);   // persiste le nouveau nom
+        _services.LogActivity(Models.ActivityCategory.Sheet, Models.ActivityAction.Modification,
+            newName, "Renommage", oldName, newName);
     }
 
     private async void Supprimer_Click(object sender, RoutedEventArgs e)
@@ -217,6 +226,7 @@ public partial class SheetsView : UserControl, IActivableView
             async s =>
             {
                 await _services.Sheets.DeleteSpreadsheetAsync(s.SpreadsheetId);
+                _services.LogActivity(Models.ActivityCategory.Sheet, Models.ActivityAction.Suppression, s.Nom);
                 s.PropertyChanged -= Sheet_PropertyChanged;
                 _sheets.Remove(s);
             });
@@ -271,6 +281,7 @@ public partial class SheetsView : UserControl, IActivableView
             Url = created.Url
         };
         _services.SheetRepository.Add(record);
+        _services.LogActivity(Models.ActivityCategory.Sheet, Models.ActivityAction.Ajout, options.Title);
         record.PropertyChanged += Sheet_PropertyChanged;
         _sheets.Insert(0, record);
         _view.Refresh();

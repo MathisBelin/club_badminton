@@ -7,24 +7,47 @@
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
             <TextBlock Text="Association" Style="{StaticResource PageTitle}" />
             <TextBlock x:Name="CountText" Foreground="#777777" FontSize="12" Margin="0,2,0,0"
-                       Text="Choisissez un libellé pour voir ses membres." />
+                       Text="Toutes les personnes. Filtrez par libellé(s) ci-dessous." />
 
             <StackPanel Orientation="Horizontal" Margin="0,12,0,0" VerticalAlignment="Center">
-                <TextBlock Text="Libellé :" VerticalAlignment="Center" Margin="0,0,8,0"
-                           Foreground="#555555" FontWeight="SemiBold" />
-                <ctrl:MultiSelectComboBox x:Name="LabelSelect" SingleSelect="True" Width="240" VerticalAlignment="Center" />
-                <Button Content="👥 Associer" Style="{StaticResource PrimaryButton}"
-                        Margin="10,0,10,0" Click="Associer_Click"
-                        ToolTip="Associer des contacts à un libellé" />
-                <Button Content="⏳ Personnes en attente" Click="Pending_Click" Margin="0,0,16,0"
-                        ToolTip="Voir les personnes ayant renseigné des infos mais pas d'e-mail" />
-                <ctrl:SearchBox x:Name="SearchBox" Width="220" TextChanged="SearchBox_TextChanged" />
+                <TextBlock Text="A au moins un de :" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="#555555" FontWeight="SemiBold"
+                           ToolTip="Filtre « OU » : personnes ayant au moins un des libellés cochés" />
+                <ctrl:MultiSelectComboBox x:Name="LabelSelect" Width="200" VerticalAlignment="Center" />
+                <Button x:Name="AdvancedToggle" Content="🔎 Recherche avancée" Click="AdvancedToggle_Click"
+                        Margin="10,0,10,0" ToolTip="Filtres avancés par libellés (ET / exclusion)" />
+                <Button x:Name="PendingBtn" Content="⏳ Inscriptions non finalisées" Click="Pending_Click"
+                        Margin="0,0,16,0" IsEnabled="False"
+                        ToolTip="Personnes ayant renseigné des infos mais pas d'e-mail (sélectionner un seul libellé)" />
+                <ctrl:SearchBox x:Name="SearchBox" Width="200" TextChanged="SearchBox_TextChanged" />
             </StackPanel>
         </StackPanel>
 
+        <!-- Recherche avancée par libellés -->
+        <Border x:Name="AdvancedPanel" DockPanel.Dock="Top" Visibility="Collapsed"
+                Background="#F4F8FB" BorderBrush="#D6E4F0" BorderThickness="1"
+                CornerRadius="6" Padding="14,12" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Recherche avancée par libellés" FontWeight="SemiBold"
+                           Foreground="#1565C0" Margin="0,0,0,10" />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center">
+                    <TextBlock Text="A TOUS ces libellés (ET) :" Width="185" VerticalAlignment="Center"
+                               Foreground="#555555" FontWeight="SemiBold" />
+                    <ctrl:MultiSelectComboBox x:Name="LabelAll" Width="240" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="N'a AUCUN de ces libellés :" Width="185" VerticalAlignment="Center"
+                               Foreground="#555555" FontWeight="SemiBold" />
+                    <ctrl:MultiSelectComboBox x:Name="LabelNone" Width="240" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Foreground="#888888" FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap"
+                           Text="Les personnes affichées ont tous les libellés « ET » et aucun des libellés exclus. Un libellé choisi ici n'est plus proposé dans les autres listes." />
+            </StackPanel>
+        </Border>
+
         <!-- Barre d'actions groupées -->
         <Border x:Name="BulkBar" DockPanel.Dock="Top" Visibility="Collapsed"
-                Background="#FDECEA" BorderBrush="#F5C6C0" BorderThickness="1"
+                Background="#EAF2F8" BorderBrush="#BBD6EA" BorderThickness="1"
                 CornerRadius="6" Padding="12,8" Margin="0,0,0,12">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -32,9 +55,11 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="BulkCountText" Grid.Column="0" VerticalAlignment="Center"
-                           Foreground="#B71C1C" FontWeight="SemiBold" />
+                           Foreground="#1565C0" FontWeight="SemiBold" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Content="Annuler la sélection" Click="ClearSelection_Click" />
+                    <Button x:Name="BulkAssocierButton" Style="{StaticResource PrimaryButton}"
+                            Click="BulkAssocier_Click" />
                     <Button x:Name="BulkDissocierButton" Style="{StaticResource DangerButton}"
                             Click="BulkDissocier_Click" Margin="0" />
                 </StackPanel>
@@ -83,11 +108,15 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="Action" Width="130" CanUserResize="False">
+                <DataGridTemplateColumn Header="Actions" Width="180" CanUserResize="False">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Button Content="✂ Dissocier" Style="{StaticResource RowDeleteButton}"
-                                    ToolTip="Retirer ce contact du libellé" Click="Dissocier_Click" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="👁 Voir" Style="{StaticResource RowButton}"
+                                        ToolTip="Voir les libellés de cette personne" Click="Voir_Click" />
+                                <Button Content="🏷 Gérer" Style="{StaticResource RowBlueButton}"
+                                        ToolTip="Gérer les libellés de cette personne" Click="Gerer_Click" />
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

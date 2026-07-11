@@ -19,6 +19,10 @@ public class AppServices
     public AdherentRepository AdherentRepository { get; private set; } = null!;
     public ObservableCollection<Adherent> Adherents { get; } = new();
 
+    public ActivityRepository ActivityRepository { get; private set; } = null!;
+    /// <summary>Historique des activités (le plus récent en tête).</summary>
+    public ObservableCollection<ActivityEntry> Activities { get; } = new();
+
     /// <summary>Compte Google connecté (données stockées par compte).</summary>
     public string CurrentAccount { get; private set; } = string.Empty;
 
@@ -63,8 +67,92 @@ public class AppServices
 
         AdherentRepository = new AdherentRepository(adherentsPath);
         SheetRepository = new SheetRepository(AppPaths.WorksheetsFileFor(CurrentAccount));
+        ActivityRepository = new ActivityRepository(AppPaths.ActivityFileFor(CurrentAccount));
         _labelsCache = null;
         ReloadAdherents();
+        ReloadActivities();
+    }
+
+    private void ReloadActivities()
+    {
+        Activities.Clear();
+        foreach (var a in ActivityRepository.Load().OrderByDescending(a => a.Date))
+            Activities.Add(a);
+    }
+
+    private const int MaxActivities = 3000; // borne l'historique pour éviter un fichier sans fin
+
+    private void AddActivity(ActivityEntry entry)
+    {
+        Activities.Insert(0, entry); // le plus récent en tête
+        while (Activities.Count > MaxActivities)
+            Activities.RemoveAt(Activities.Count - 1);
+        ActivityRepository.Save(Activities);
+    }
+
+    /// <summary>Journalise une action (ajout/modif/suppression/association/dissociation) et la persiste.</summary>
+    public void LogActivity(ActivityCategory category, ActivityAction action, string target,
+        string? details = null, string? oldValue = null, string? newValue = null)
+        => AddActivity(new ActivityEntry
+        {
+            Date = DateTime.Now,
+            Category = category,
+            Action = action,
+            Target = target ?? string.Empty,
+            Details = details ?? string.Empty,
+            OldValue = oldValue ?? string.Empty,
+            NewValue = newValue ?? string.Empty
+        });
+
+    /// <summary>Journalise une action sur un contact en FIGEANT son nom/prénom/tél/mail du moment.</summary>
+    public void LogContactActivity(ActivityAction action, string nom, string prenom, string tel, string email,
+        string? details = null, string? oldValue = null, string? newValue = null)
+    {
+        var display = $"{prenom} {nom}".Trim();
+        if (string.IsNullOrWhiteSpace(display))
+            display = email;
+        AddActivity(new ActivityEntry
+        {
+            Date = DateTime.Now,
+            Category = ActivityCategory.Utilisateur,
+            Action = action,
+            Target = display,
+            Details = details ?? string.Empty,
+            OldValue = oldValue ?? string.Empty,
+            NewValue = newValue ?? string.Empty,
+            TargetNom = nom ?? string.Empty,
+            TargetPrenom = prenom ?? string.Empty,
+            TargetTelephone = tel ?? string.Empty,
+            TargetEmail = email ?? string.Empty
+        });
+    }
+
+    public void LogContactActivity(ActivityAction action, Adherent a,
+        string? details = null, string? oldValue = null, string? newValue = null)
+        => LogContactActivity(action, a.Nom, a.Prenom, a.Telephone, a.Email, details, oldValue, newValue);
+
+    /// <summary>Nom affichable d'un adhérent (prénom nom, ou e-mail à défaut).</summary>
+    public static string ContactName(Adherent a)
+    {
+        var n = $"{a.Prenom} {a.Nom}".Trim();
+        return string.IsNullOrWhiteSpace(n) ? a.Email : n;
+    }
+
+    /// <summary>Journalise une modification de contact (champs changés, ancienne/nouvelle valeur).</summary>
+    public void LogContactModification(Adherent a, string oNom, string oPre, string oTel, string oMail, string details)
+    {
+        var changes = new List<(string Field, string Old, string New)>();
+        if (oNom != a.Nom) changes.Add(("Nom", oNom, a.Nom));
+        if (oPre != a.Prenom) changes.Add(("Prénom", oPre, a.Prenom));
+        if (oTel != a.Telephone) changes.Add(("Téléphone", oTel, a.Telephone));
+        if (oMail != a.Email) changes.Add(("E-mail", oMail, a.Email));
+        if (changes.Count == 0)
+            return;
+
+        string Fmt(Func<(string Field, string Old, string New), string> sel)
+            => string.Join(" · ", changes.Select(c => $"{c.Field}: {(string.IsNullOrWhiteSpace(sel(c)) ? "—" : sel(c))}"));
+
+        LogContactActivity(ActivityAction.Modification, a, details, Fmt(c => c.Old), Fmt(c => c.New));
     }
 
     /// <summary>
@@ -155,9 +243,41 @@ public class AppServices
         if (_labelsCache == null || forceRefresh)
         {
             _labelsCache = await Contacts.ListLabelsAsync();
+            ReconcileLabelNames();
             LabelsChanged?.Invoke();
         }
         return OrderLabels(_labelsCache);
+    }
+
+    /// <summary>
+    /// Répercute les renommages de libellés sur les noms mémorisés (dénormalisés) dans les synchros
+    /// auto et les personnes en attente. Sans ça, la colonne « Libellé cible » et la liste des
+    /// « inscriptions non finalisées » garderaient l'ancien nom jusqu'au redémarrage.
+    /// </summary>
+    private void ReconcileLabelNames()
+    {
+        if (_labelsCache == null)
+            return;
+
+        var nameByResource = _labelsCache
+            .GroupBy(l => l.ResourceName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Nom, StringComparer.Ordinal);
+
+        var syncsChanged = false;
+        foreach (var s in AutoSyncs)
+            if (nameByResource.TryGetValue(s.LabelResourceName, out var name)
+                && !string.Equals(s.LabelName, name, StringComparison.Ordinal))
+            {
+                s.LabelName = name; // notifie l'UI (INotifyPropertyChanged) + doublons déjà chargés
+                syncsChanged = true;
+            }
+
+        foreach (var p in Pending)
+            if (nameByResource.TryGetValue(p.LabelResourceName, out var name))
+                p.LabelName = name;
+
+        if (syncsChanged)
+            SaveSyncs();
     }
 
     /// <summary>Libellés déjà en cache (ou liste vide), triés par ordre alphabétique, sans appel réseau.</summary>
@@ -281,20 +401,21 @@ public class AppServices
     }
 
     /// <summary>Remplace les personnes en attente d'un libellé par la liste fraîchement lue.</summary>
-    private void UpdatePending(AutoSyncConfig config, List<(string Nom, string Prenom, string Tel)> incompletes)
+    private void UpdatePending(AutoSyncConfig config, List<(string Nom, string Prenom, string Tel, string Email)> incompletes)
     {
         for (var i = Pending.Count - 1; i >= 0; i--)
             if (string.Equals(Pending[i].LabelResourceName, config.LabelResourceName, StringComparison.Ordinal))
                 Pending.RemoveAt(i);
 
-        foreach (var (nom, prenom, tel) in incompletes)
+        foreach (var (nom, prenom, tel, mail) in incompletes)
             Pending.Add(new PendingPerson
             {
                 LabelResourceName = config.LabelResourceName,
                 LabelName = config.LabelName,
                 Nom = nom,
                 Prenom = prenom,
-                Telephone = tel
+                Telephone = tel,
+                Email = mail
             });
     }
 
@@ -305,6 +426,8 @@ public class AppServices
 
     public void StartSync(AutoSyncConfig config)
     {
+        if (!config.IsComplete)
+            return; // une synchro incomplète (brouillon) ne peut pas être lancée
         config.Enabled = true;
         config.NextRun = DateTime.Now; // exécution immédiate
         SaveSyncs();
@@ -336,7 +459,7 @@ public class AppServices
     {
         var now = DateTime.Now;
         foreach (var s in AutoSyncs)
-            if (s.Enabled && !s.IsImporting && (s.NextRun == null || s.NextRun <= now))
+            if (s.Enabled && s.IsComplete && !s.IsImporting && (s.NextRun == null || s.NextRun <= now))
                 _ = RunSyncNowAsync(s);
     }
 
@@ -396,32 +519,89 @@ public class AppServices
             })
             .Where(c => EmailValidator.IsValid(c.Email)).ToList();
 
-        // Personnes ayant renseigné des infos (nom/prénom/tél) mais SANS e-mail : inscription
-        // incomplète → on les mémorise pour la page « Personnes en attente » (par libellé).
-        UpdatePending(config, CsvContactImporter.BuildIncompleteFromColumns(rows, colNom, colPrenom, colTel, colEmail));
+        // Personnes ayant renseigné des infos (nom/prénom/tél) mais SANS e-mail exploitable :
+        // inscription incomplète (le tri « connue » vs « en attente » se fait plus bas, une fois
+        // les contacts du Sheet fusionnés, pour comparer à l'état à jour des adhérents).
+        var incompletes = CsvContactImporter.BuildIncompleteFromColumns(rows, colNom, colPrenom, colTel, colEmail);
+
+        // Doublons d'e-mail : personnes ayant inscrit le même e-mail (valide) plusieurs fois. On les
+        // associe quand même (upsert par e-mail), mais on les signale via le bouton d'alerte de la synchro.
+        var duplicates = parsed
+            .GroupBy(p => p.Email, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g)
+            .Select(p => new PendingPerson
+            {
+                LabelResourceName = config.LabelResourceName,
+                LabelName = config.LabelName,
+                Nom = p.Nom,
+                Prenom = p.Prenom,
+                Telephone = p.Telephone,
+                Email = p.Email
+            })
+            .ToList();
 
         // Adhérent local correspondant à chaque ligne du fichier (existant fusionné ou nouveau).
         var sheetContacts = new List<Adherent>();
         int added = 0, updated = 0;
+        var syncDetails = $"Synchro auto « {config.Name} »";
         foreach (var p in parsed)
         {
             var existing = Adherents.FirstOrDefault(a =>
                 string.Equals(a.Email, p.Email, StringComparison.OrdinalIgnoreCase));
             if (existing != null)
             {
-                if (MergeFields(existing, p)) updated++;
+                var (oNom, oPre, oTel, oMail) = (existing.Nom, existing.Prenom, existing.Telephone, existing.Email);
+                if (MergeFields(existing, p))
+                {
+                    updated++;
+                    LogContactModification(existing, oNom, oPre, oTel, oMail, syncDetails);
+                }
                 sheetContacts.Add(existing);
             }
             else
             {
                 Adherents.Add(p);
                 added++;
+                LogContactActivity(ActivityAction.Ajout, p, syncDetails);
                 sheetContacts.Add(p);
             }
         }
 
         if (added > 0 || updated > 0)
             SaveAdherents();
+
+        // Option « associer les personnes connues » : une personne sans e-mail exploitable mais dont
+        // les infos correspondent de façon CERTAINE (Connue = ≥ 2 champs et un SEUL contact) est
+        // associée au libellé via ce contact et retirée des inscriptions non finalisées. En cas de
+        // doute (0 ou ≥ 2 correspondances), elle reste en attente. Aucune écriture dans le Sheet.
+        var knownContacts = new List<Adherent>();
+        var pendingList = incompletes;
+        if (config.AutoAssociateKnown && incompletes.Count > 0)
+        {
+            pendingList = new List<(string Nom, string Prenom, string Tel, string Email)>();
+            foreach (var inc in incompletes)
+            {
+                var person = new PendingPerson
+                {
+                    LabelResourceName = config.LabelResourceName,
+                    LabelName = config.LabelName,
+                    Nom = inc.Nom,
+                    Prenom = inc.Prenom,
+                    Telephone = inc.Tel,
+                    Email = inc.Email
+                };
+                var match = PendingMatcher.Match(person, Adherents);
+                if (match.Level == MatchLevel.Connue && match.Candidates.Count == 1
+                    && EmailValidator.IsValid(match.Candidates[0].Email))
+                    knownContacts.Add(match.Candidates[0]);
+                else
+                    pendingList.Add(inc);
+            }
+        }
+
+        UpdatePending(config, pendingList);
+        config.SetWarnings(pendingList.Count, duplicates);
 
         config.Progress = 10;
 
@@ -475,10 +655,18 @@ public class AppServices
         config.Progress = 90;
 
         // Association au libellé cible (unique) : ajout des manquants, retrait des absents.
+        config.SetTrace(Array.Empty<SyncTraceEntry>());
         var group = config.LabelResourceName;
         if (!string.IsNullOrWhiteSpace(group))
         {
-            var sheetEmails = new HashSet<string>(parsed.Select(p => p.Email), StringComparer.OrdinalIgnoreCase);
+            // E-mails du Sheet + e-mails des contacts « connus » associés via l'option (pour ne pas
+            // les dissocier). On distingue les deux ensembles pour marquer la trace en jaune.
+            var parsedEmails = new HashSet<string>(parsed.Select(p => p.Email), StringComparer.OrdinalIgnoreCase);
+            var knownEmails = new HashSet<string>(knownContacts.Select(a => a.Email), StringComparer.OrdinalIgnoreCase);
+            var sheetEmails = new HashSet<string>(parsedEmails, StringComparer.OrdinalIgnoreCase);
+            foreach (var e in knownEmails)
+                sheetEmails.Add(e);
+
             var byEmail = Adherents
                 .Where(a => !string.IsNullOrWhiteSpace(a.Email) && sheetEmails.Contains(a.Email))
                 .GroupBy(a => a.Email, StringComparer.OrdinalIgnoreCase)
@@ -505,6 +693,7 @@ public class AppServices
                             resourceResolved = true;
                         }
                         await Contacts.SetMembershipAsync(a.GoogleResourceName, group, add: true);
+                        LogContactActivity(ActivityAction.Association, a, $"{config.LabelName} ({syncDetails})");
                     }
                     catch (GoogleSyncException) { /* repris au prochain cycle */ }
                 }
@@ -513,12 +702,33 @@ public class AppServices
                 {
                     if (sheetEmails.Contains(email))
                         continue;
-                    try { await Contacts.SetMembershipAsync(resourceName, group, add: false); }
+                    try
+                    {
+                        await Contacts.SetMembershipAsync(resourceName, group, add: false);
+                        var who = Adherents.FirstOrDefault(a =>
+                            string.Equals(a.Email, email, StringComparison.OrdinalIgnoreCase));
+                        var label = $"{config.LabelName} ({syncDetails})";
+                        if (who != null)
+                            LogContactActivity(ActivityAction.Dissociation, who, label);
+                        else
+                            LogContactActivity(ActivityAction.Dissociation, string.Empty, string.Empty, string.Empty, email, label);
+                    }
                     catch (GoogleSyncException) { /* repris au prochain cycle */ }
                 }
 
                 if (resourceResolved)
                     SaveAdherents();
+
+                // Trace : personnes associées au libellé lors de cette exécution. En jaune, celles qui
+                // ne sont passées que grâce à l'option « connues » (aucun e-mail dans le Sheet).
+                config.SetTrace(byEmail.Select(kv => new SyncTraceEntry
+                {
+                    Nom = kv.Value.Nom,
+                    Prenom = kv.Value.Prenom,
+                    Telephone = kv.Value.Telephone,
+                    Email = kv.Value.Email,
+                    ViaKnown = knownEmails.Contains(kv.Key) && !parsedEmails.Contains(kv.Key)
+                }));
             }
         }
 
@@ -549,6 +759,23 @@ public class AppServices
     /// Détecte automatiquement les colonnes d'un Sheet par leurs en-têtes (lecture depuis la 1re
     /// ligne pour inclure l'en-tête). Renvoie les lettres trouvées (null si non détectée).
     /// </summary>
+    /// <summary>Vérifie qu'un Google Sheet existe et est lisible (lecture d'une cellule).</summary>
+    public async Task<bool> SheetExistsAsync(string? sheetUrl)
+    {
+        var id = ExtractSheetId(sheetUrl);
+        if (id == null)
+            return false;
+        try
+        {
+            await Sheets.ReadRowsAsync(id, "A1:A1");
+            return true;
+        }
+        catch (GoogleSyncException)
+        {
+            return false;
+        }
+    }
+
     public async Task<DetectedColumns> DetectColumnsAsync(string sheetUrl, int endRow)
     {
         var id = ExtractSheetId(sheetUrl);

@@ -22,6 +22,12 @@ public partial class ImportWindow : Window
     public IReadOnlyDictionary<string, string> Corrections { get; private set; }
         = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>E-mails présents plusieurs fois dans la source (format « adresse (×N) »).</summary>
+    public List<string> DuplicateEmails { get; private set; } = new();
+
+    /// <summary>Personnes lues avec des infos mais sans e-mail exploitable (non importées).</summary>
+    public List<string> IncompletePeople { get; private set; } = new();
+
     private static readonly Brush OkBrush = new SolidColorBrush(Color.FromRgb(0x2E, 0x7D, 0x32));
     private static readonly Brush ErrBrush = new SolidColorBrush(Color.FromRgb(0xC6, 0x28, 0x28));
     private static readonly Brush WarnBrush = new SolidColorBrush(Color.FromRgb(0xB8, 0x86, 0x0B));
@@ -333,7 +339,43 @@ public partial class ImportWindow : Window
 
         ParsedContacts = contacts;
         SelectedLabelResourceNames = LabelsSelect.SelectedTags.OfType<string>().ToList();
+
+        // Bilan pour l'appelant : e-mails en double + personnes aux infos incomplètes.
+        DuplicateEmails = contacts
+            .GroupBy(c => c.Email.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => $"{g.Key} (×{g.Count()})")
+            .OrderBy(s => s, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        if (fileMode && rowsSnapshot != null)
+        {
+            var sliced = CsvContactImporter.SliceRows(rowsSnapshot, start, end);
+            IncompletePeople = CsvContactImporter.BuildIncompleteFromColumns(sliced,
+                    CsvContactImporter.ColIndex(colNom),
+                    CsvContactImporter.ColIndex(colPrenom),
+                    CsvContactImporter.ColIndex(colTel),
+                    CsvContactImporter.ColIndex(colEmail))
+                .Select(FormatIncomplete)
+                .ToList();
+        }
+
         DialogResult = true;
+    }
+
+    /// <summary>Décrit une personne aux infos incomplètes (nom/prénom/tél + motif e-mail).</summary>
+    private static string FormatIncomplete((string Nom, string Prenom, string Tel, string Email) p)
+    {
+        var identity = string.Join(" ", new[] { p.Nom, p.Prenom }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        if (string.IsNullOrWhiteSpace(identity))
+            identity = string.IsNullOrWhiteSpace(p.Tel) ? "(sans nom)" : p.Tel;
+        else if (!string.IsNullOrWhiteSpace(p.Tel))
+            identity += $" — {p.Tel}";
+
+        var reason = string.IsNullOrWhiteSpace(p.Email)
+            ? "e-mail manquant"
+            : $"e-mail invalide : {p.Email}";
+        return $"{identity} ({reason})";
     }
 
     /// <summary>

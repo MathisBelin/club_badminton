@@ -79,6 +79,14 @@ public partial class AutoSyncView : UserControl, IActivableView
 
     private void OpenEdit(AutoSyncConfig c)
     {
+        if (c.IsImporting)
+        {
+            MessageBox.Show(Window.GetWindow(this),
+                "Cette synchro est en cours d'exécution. Attendez qu'elle se termine pour la modifier.",
+                "Synchronisation", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         var win = new AutoSyncEditWindow(_services, c) { Owner = Window.GetWindow(this) };
         win.ShowDialog();
         UpdateCount();
@@ -89,9 +97,21 @@ public partial class AutoSyncView : UserControl, IActivableView
         if ((sender as FrameworkElement)?.DataContext is not AutoSyncConfig c)
             return;
         if (c.Enabled)
+        {
             _services.StopSync(c);
-        else
-            _services.StartSync(c);
+            return;
+        }
+
+        if (!c.IsComplete)
+        {
+            MessageBox.Show(Window.GetWindow(this),
+                "Cette synchro est incomplète (brouillon). Renseignez le nom, le lien du Sheet, " +
+                "le libellé cible et la colonne e-mail pour pouvoir la lancer.",
+                "Synchronisation", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _services.StartSync(c);
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
@@ -111,5 +131,26 @@ public partial class AutoSyncView : UserControl, IActivableView
     {
         if ((sender as Hyperlink)?.DataContext is AutoSyncConfig c && !string.IsNullOrWhiteSpace(c.SheetUrl))
             BrowserService.Open(c.SheetUrl);
+    }
+
+    /// <summary>Demande d'ouvrir la page « Inscriptions non finalisées » pré-filtrée sur un libellé.</summary>
+    public event Action<string?>? OpenPendingRequested;
+
+    private void Warning_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not AutoSyncConfig c)
+            return;
+
+        var win = new SyncWarningWindow(_services, c) { Owner = Window.GetWindow(this) };
+        win.ShowDialog();
+        if (win.GoToPending)
+            OpenPendingRequested?.Invoke(c.LabelResourceName);
+    }
+
+    private void Trace_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not AutoSyncConfig c)
+            return;
+        new SyncTraceWindow(c) { Owner = Window.GetWindow(this) }.ShowDialog();
     }
 }

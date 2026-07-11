@@ -35,8 +35,9 @@
                         <RadioButton x:Name="NavAssociation" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="association" Content="🔗   Association"
                                      Checked="Nav_Checked" />
+                        <!-- Accessible uniquement via le bouton « Inscriptions non finalisées » de la page Association. -->
                         <RadioButton x:Name="NavPending" Style="{StaticResource NavButton}"
-                                     GroupName="Nav" Tag="pending" Content="⏳   Personnes en attente"
+                                     GroupName="Nav" Tag="pending" Visibility="Collapsed"
                                      Checked="Nav_Checked" />
                         <RadioButton x:Name="NavEmail" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="email" Checked="Nav_Checked">
@@ -52,6 +53,9 @@
                                      Checked="Nav_Checked" />
                         <RadioButton x:Name="NavAutoSync" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="autosync" Content="🔄   Synchro auto"
+                                     Checked="Nav_Checked" />
+                        <RadioButton x:Name="NavHistory" Style="{StaticResource NavButton}"
+                                     GroupName="Nav" Tag="history" Content="🕓   Historique"
                                      Checked="Nav_Checked" />
                         <RadioButton x:Name="NavSettings" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="settings" Content="⚙   Paramètres"
@@ -92,19 +96,27 @@
                                            Foreground="#B71C1C" FontSize="12" FontWeight="SemiBold" />
                             </Border>
 
-                            <!-- Bouton notification des synchros en cours -->
-                            <StackPanel x:Name="NotifArea" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            <!-- Boutons synchro : synchro instantanée + notifications -->
+                            <StackPanel x:Name="NotifArea" Orientation="Horizontal"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center"
                                         Visibility="Collapsed">
                                 <Button x:Name="NotifButton" Click="NotifButton_Click" Padding="8,4"
                                         Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                        ToolTip="Synchronisations en cours">
+                                        ToolTip="Synchronisations">
                                     <Grid>
-                                        <TextBlock Text="🔔" FontSize="17" />
+                                        <TextBlock Text="🔄" FontSize="17" />
                                         <Border x:Name="NotifBadge" Background="#2E7D32" CornerRadius="8"
                                                 MinWidth="16" Height="16" Padding="3,0" Visibility="Collapsed"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-6,0">
                                             <TextBlock x:Name="NotifCount" Foreground="White" FontSize="10"
                                                        FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <Border x:Name="NotifWarnBadge" Background="#F9A825" CornerRadius="8"
+                                                Width="16" Height="16" Visibility="Collapsed"
+                                                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-6,-4,0,0"
+                                                ToolTip="Des synchros ont des inscriptions non finalisées">
+                                            <TextBlock Text="⚠" Foreground="White" FontSize="9"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                     </Grid>
                                 </Button>
@@ -112,39 +124,78 @@
                                        PlacementTarget="{Binding ElementName=NotifButton}"
                                        AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-220">
                                     <Border Background="White" BorderBrush="#DDE7DD" BorderThickness="1"
-                                            CornerRadius="6" Padding="12" Width="300" Margin="0,4,8,0">
+                                            CornerRadius="6" Padding="12" Width="320" Margin="0,4,8,0">
                                         <Border.Effect>
                                             <DropShadowEffect Color="#40000000" BlurRadius="12" ShadowDepth="2" />
                                         </Border.Effect>
                                         <StackPanel>
-                                            <TextBlock Text="Synchronisations en cours" FontWeight="SemiBold"
+                                            <TextBlock Text="Synchronisations" FontWeight="SemiBold"
                                                        Foreground="#233323" Margin="0,0,0,8" />
                                             <TextBlock x:Name="NotifEmpty" Text="Aucune synchro en marche."
                                                        Foreground="#999999" FontSize="12" Visibility="Collapsed" />
                                             <ItemsControl x:Name="NotifList">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <Grid Margin="0,4">
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*" />
-                                                                <ColumnDefinition Width="Auto" />
-                                                            </Grid.ColumnDefinitions>
-                                                            <StackPanel Grid.Column="0">
-                                                                <TextBlock Text="{Binding Name}" FontSize="13"
-                                                                           TextTrimming="CharacterEllipsis" />
-                                                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                                                    <TextBlock Text="⟳" FontSize="12" Foreground="#2E7D32"
-                                                                               Margin="0,0,5,0" VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding CountdownText}" FontSize="11"
-                                                                               Foreground="#2E7D32" VerticalAlignment="Center" />
-                                                                    <TextBlock Text="{Binding ProgressText}" FontSize="11" FontWeight="SemiBold"
-                                                                               Foreground="#2E7D32" VerticalAlignment="Center" Margin="6,0,0,0"
-                                                                               Visibility="{Binding IsImporting, Converter={StaticResource BoolToVisibility}}" />
-                                                                </StackPanel>
+                                                        <Border Padding="0,4" BorderBrush="#EEEEEE" BorderThickness="0,0,0,1">
+                                                            <StackPanel>
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <StackPanel Grid.Column="0">
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <TextBlock Text="⚠" FontSize="12" Foreground="#F9A825"
+                                                                                       VerticalAlignment="Center" Margin="0,0,4,0"
+                                                                                       Visibility="{Binding HasIncomplete, Converter={StaticResource BoolToVisibility}}" />
+                                                                            <TextBlock Text="{Binding Name}" FontSize="13"
+                                                                                       TextTrimming="CharacterEllipsis" />
+                                                                        </StackPanel>
+                                                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                                            <TextBlock Text="⟳" FontSize="12" Foreground="#2E7D32"
+                                                                                       Margin="0,0,5,0" VerticalAlignment="Center"
+                                                                                       RenderTransformOrigin="0.5,0.5">
+                                                                                <TextBlock.RenderTransform>
+                                                                                    <RotateTransform Angle="0" />
+                                                                                </TextBlock.RenderTransform>
+                                                                                <TextBlock.Triggers>
+                                                                                    <EventTrigger RoutedEvent="Loaded">
+                                                                                        <BeginStoryboard>
+                                                                                            <Storyboard>
+                                                                                                <DoubleAnimation
+                                                                                                    Storyboard.TargetProperty="(TextBlock.RenderTransform).(RotateTransform.Angle)"
+                                                                                                    From="0" To="360" Duration="0:0:1.1" RepeatBehavior="Forever" />
+                                                                                            </Storyboard>
+                                                                                        </BeginStoryboard>
+                                                                                    </EventTrigger>
+                                                                                </TextBlock.Triggers>
+                                                                            </TextBlock>
+                                                                            <TextBlock Text="{Binding CountdownText}" FontSize="11"
+                                                                                       Foreground="#2E7D32" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="{Binding ProgressText}" FontSize="11" FontWeight="SemiBold"
+                                                                                       Foreground="#2E7D32" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                                                       Visibility="{Binding IsImporting, Converter={StaticResource BoolToVisibility}}" />
+                                                                        </StackPanel>
+                                                                    </StackPanel>
+                                                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <Button Content="⟳" FontSize="15" Foreground="#2E7D32"
+                                                                                Click="SyncOne_Click" ToolTip="Synchroniser maintenant"
+                                                                                MinWidth="0" Padding="6,2" Margin="0,0,2,0"
+                                                                                Background="Transparent" BorderThickness="0" Cursor="Hand" />
+                                                                        <Button Content="⏸" FontSize="13"
+                                                                                Click="Suspend_Click" ToolTip="Suspendre"
+                                                                                MinWidth="0" Padding="6,2"
+                                                                                Background="Transparent" BorderThickness="0" Cursor="Hand" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                                <TextBlock Margin="0,4,0,0"
+                                                                           Visibility="{Binding HasIncomplete, Converter={StaticResource BoolToVisibility}}">
+                                                                    <Hyperlink Click="NotifPending_Click" Foreground="#B8860B">
+                                                                        <Run Text="⏳ Voir les inscriptions non finalisées" />
+                                                                    </Hyperlink>
+                                                                </TextBlock>
                                                             </StackPanel>
-                                                            <Button Grid.Column="1" Content="Suspendre" Padding="7,3"
-                                                                    VerticalAlignment="Center" Click="Suspend_Click" />
-                                                        </Grid>
+                                                        </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>

@@ -13,6 +13,14 @@ public static partial class EmailValidator
         => !string.IsNullOrWhiteSpace(email) && EmailRegex().IsMatch(email.Trim());
 
     /// <summary>
+    /// Vrai si l'e-mail est valide tel quel, OU le devient après correction automatique
+    /// (<see cref="Suggest"/> : virgule→point, espaces…). Sert à distinguer un e-mail
+    /// réellement au mauvais format d'une simple faute de frappe rattrapable.
+    /// </summary>
+    public static bool IsValidOrFixable(string? email)
+        => IsValid(email) || IsValid(Suggest(email));
+
+    /// <summary>
     /// Propose une correction : supprime les espaces, remplace les virgules par des points,
     /// fusionne les points doubles et enlève les points en début/fin.
     /// </summary>

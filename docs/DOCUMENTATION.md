@@ -105,7 +105,14 @@ Views/                     Écrans (UserControl) et fenêtres (Window)
 ### 2.3 Navigation
 `MainWindow` héberge un menu latéral (RadioButtons) et un `ContentControl`. Les pages sont des
 `UserControl` instanciés une fois puis affichés par échange de contenu avec animation.
-Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Google Forms, Préinscriptions, Historique, Paramètres**.
+Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Formulaires, Préinscriptions, Historique, Paramètres**.
+
+> **Formulaires** (`FormulairesView`) est le point d'accès à l'**application web** des formulaires
+> d'inscription (projet `bad-web`) : elle affiche l'adresse du site et l'ouvre dans le navigateur
+> (`BrowserService.Open`). La page **Google Forms** (`FormsView`, §10bis) est **mise en veille** :
+> son entrée de menu `NavForms` est `Visibility="Collapsed"` dans `MainWindow.xaml`. Le code et la vue
+> restent en place (la synchro Drive au démarrage continue, car **Préinscriptions** s'appuie sur le
+> registre des formulaires) ; pour la réactiver, retirer `Visibility="Collapsed"`.
 La page **Préinscriptions** (`PreinscriptionView`, §11) s'ouvre sur un **sélecteur de formulaire** (tableau)
 puis affiche les **réponses** du formulaire choisi ; on peut aussi y arriver directement depuis la page
 **Google Forms** (bouton **👥** ou double-clic).

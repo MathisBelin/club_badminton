@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private readonly AssociationView _associationView;
     private readonly EmailView _emailView;
     private readonly SheetsView _sheetsView;
+    private readonly FormulairesView _formulairesView;
     private readonly FormsView _formsView;
     private readonly PreinscriptionView _preinscriptionView;
     private readonly HistoryView _historyView;
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
         _associationView = new AssociationView(_services);
         _emailView = new EmailView(_services);
         _sheetsView = new SheetsView(_services);
+        _formulairesView = new FormulairesView();
         _formsView = new FormsView(_services);
         _preinscriptionView = new PreinscriptionView(_services);
         _historyView = new HistoryView(_services);
@@ -210,6 +212,7 @@ public partial class MainWindow : Window
             "association" => _associationView,
             "email" => _emailView,
             "sheets" => _sheetsView,
+            "formulaires" => _formulairesView,
             "forms" => _formsView,
             "preinscription" => _preinscriptionView,
             "history" => _historyView,

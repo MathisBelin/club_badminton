@@ -57,7 +57,6 @@ public partial class AssociationView : UserControl, IActivableView
     /// <summary>Un filtre « inclusion » (OU/ET) a changé → adapte la liste d'exclusion et recharge.</summary>
     private void OnIncludeChanged()
     {
-        PendingBtn.IsEnabled = SelectedLabels().Count == 1;
         RebuildNoneOptions();
         _ = LoadMembersAsync();
     }
@@ -192,8 +191,6 @@ public partial class AssociationView : UserControl, IActivableView
         var andLabels = LabelAll.SelectedTags.OfType<string>().ToList();   // ET : tous
         var noneLabels = LabelNone.SelectedTags.OfType<string>().ToList(); // EXCLUSION : aucun
 
-        PendingBtn.IsEnabled = orLabels.Count == 1;
-
         foreach (var m in _members)
             m.PropertyChanged -= Member_PropertyChanged;
         _members.Clear();
@@ -283,13 +280,13 @@ public partial class AssociationView : UserControl, IActivableView
         }
     }
 
-    // ---- Personnes en attente --------------------------------------------
+    // ---- Préinscriptions --------------------------------------------------
 
-    /// <summary>Demande d'ouvrir la page « Personnes en attente » (libellé courant en paramètre).</summary>
-    public event Action<string?>? OpenPendingRequested;
+    /// <summary>Demande d'ouvrir la page « Préinscriptions ».</summary>
+    public event Action? OpenPreinscriptionsRequested;
 
-    private void Pending_Click(object sender, RoutedEventArgs e)
-        => OpenPendingRequested?.Invoke(SelectedLabels().FirstOrDefault());
+    private void Preinscriptions_Click(object sender, RoutedEventArgs e)
+        => OpenPreinscriptionsRequested?.Invoke();
 
     // ---- Sélection multiple ----------------------------------------------
 

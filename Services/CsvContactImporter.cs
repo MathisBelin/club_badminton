@@ -243,6 +243,26 @@ public static class CsvContactImporter
 
     // ---- Détails ----------------------------------------------------------
 
+    /// <summary>
+    /// Détecte à quel champ contact (prenom/nom/email/tel) correspond un intitulé de question/colonne.
+    /// Renvoie null si aucun. Sert à l'auto-détection des réponses de formulaire.
+    /// </summary>
+    public static string? DetectContactField(string? title)
+    {
+        var n = Normalize(title ?? string.Empty);
+        if (string.IsNullOrEmpty(n))
+            return null;
+        if (n.Contains("PRENOM"))
+            return "prenom";
+        if (n.Contains("NOM"))
+            return "nom";
+        if ((n.Contains("MAIL") || n.Contains("COURRIEL")) && !n.Contains('@'))
+            return "email";
+        if (n.Contains("TEL") || n.Contains("PORTABLE") || n.Contains("MOBILE") || n.Contains("NUMERO"))
+            return "tel";
+        return null;
+    }
+
     private static Dictionary<string, int> MapHeader(string[] fields)
     {
         var map = new Dictionary<string, int>();

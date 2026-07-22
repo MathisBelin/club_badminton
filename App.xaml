@@ -11,12 +11,8 @@
 
         <conv:PhoneFormatConverter x:Key="PhoneFormat" />
         <conv:PhoneColorConverter x:Key="PhoneColor" />
-        <conv:RunningBrushConverter x:Key="RunningBrush" />
-        <conv:RunningTextConverter x:Key="RunningText" />
-        <conv:RunningToggleTextConverter x:Key="RunningToggleText" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-        <conv:MatchLevelBrushConverter x:Key="MatchLevelBrush" />
-        <conv:MatchLevelTextConverter x:Key="MatchLevelText" />
+        <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:ActionBrushConverter x:Key="ActionBrush" />
 
         <!-- Case à cocher moderne (arrondie, verte cochée) -->

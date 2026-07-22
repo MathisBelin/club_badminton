@@ -143,6 +143,21 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Mails secondaires" Width="120" CanUserResize="False"
+                                        SortMemberPath="SecondaryEmailsBadge">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid HorizontalAlignment="Center">
+                                <TextBlock Text="N/A" Foreground="#9AA0A6" VerticalAlignment="Center"
+                                           Visibility="{Binding HasSecondaryEmails, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <Button Style="{StaticResource RowBlueButton}"
+                                        Content="{Binding SecondaryEmailsBadge}"
+                                        ToolTip="Voir les e-mails secondaires" Click="SecondaryEmails_Click"
+                                        Visibility="{Binding HasSecondaryEmails, Converter={StaticResource BoolToVisibility}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Ajouté le" Width="110" SortMemberPath="DateInscription"
                                     Binding="{Binding DateInscription, StringFormat=\{0:dd/MM/yyyy\}}" />
                 <DataGridTemplateColumn Header="Actions" Width="300" CanUserResize="False">

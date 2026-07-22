@@ -14,8 +14,9 @@ badminton, synchronisée avec **Google Contacts**, **Google Sheets** et **Gmail*
   compte Google (écran de connexion au démarrage).
 - **Données par compte** : chaque compte Google a son propre jeu de données local, isolé.
 - **Synchronisation deux sens** avec Google Contacts (création / modification / suppression).
-- **Synchronisations automatiques multiples** : plusieurs Google Sheets → plusieurs libellés,
-  en parallèle, chacune sur son minuteur.
+- **Formulaires Google & réponses** : gestion des Google Forms (créer, configurer, associer un
+  libellé, paramétrer les réponses) et **visualisation des répondants** d'un formulaire sous forme
+  de contacts, avec **liste d'attente** (par date de réponse) et **validation** en adhérents.
 - **Historique des activités** : journal local par compte (ajouts, modifs, suppressions,
   associations, dissociations).
 - **Hors ligne** : l'application reste utilisable ; seules les actions Google nécessitent Internet.
@@ -27,7 +28,7 @@ badminton, synchronisée avec **Google Contacts**, **Google Sheets** et **Gmail*
 ### 2.1 Pile technique
 - **C# / WPF / .NET 8** (`net8.0-windows`), code-behind propre (pas de MVVM lourd, pas de DI).
 - **NuGet** : `Google.Apis.Auth`, `Google.Apis.PeopleService.v1`, `Google.Apis.Sheets.v4`,
-  `Google.Apis.Drive.v3`, `ClosedXML` (lecture Excel).
+  `Google.Apis.Drive.v3`, `Google.Apis.Forms.v1`, `ClosedXML` (lecture Excel).
 - **Persistance** : fichiers **JSON** (`System.Text.Json`).
 
 ### 2.2 Organisation du code
@@ -39,34 +40,37 @@ app.manifest               DPI-aware
 assets/app.ico             Icône de l'application
 
 Models/                    Objets de données (POCO + INotifyPropertyChanged)
-  Adherent.cs              Adhérent (Id, Nom, Prenom, Telephone, Email, DateInscription, GoogleResourceName…)
-  AppSettings.cs           Paramètres persistés (navigateur, compte, liste des synchros…)
-  AutoSyncConfig.cs        Une synchro auto (Sheet → libellé) + état runtime (minuteur, %, alertes, trace)
+  Adherent.cs              Adhérent (Id, Nom, Prenom, Telephone, Email, SecondaryEmails, DateInscription, GoogleResourceName…)
+  AppSettings.cs           Paramètres persistés (navigateur, compte…)
   LabelItem.cs             Libellé (Nom, ResourceName, NombreMembres, IsSelected)
   SheetRecord.cs           Classeur listé (id, nom, url, date, IsSelected)
-  PendingPerson.cs         Inscription incomplète (nom/prénom/tél + e-mail brut manquant/mal formé)
-  SyncTraceEntry.cs        Personne associée par une synchro (ViaKnown = via l'option « connues »)
+  FormRecord.cs            Google Form listé (id, nom, lien, date, libellé associé, FieldMap réponse→colonne, AnswerRules)
+  FormTemplate.cs          Modèle de formulaire local (titre + questions typées) réutilisable — voir §10bis
   ActivityEntry.cs         Une entrée de l'historique (catégorie, action, date, cible, ancien/nouveau + instantané contact)
   CheckOption.cs           Option cochable générique (utilisée par le select2)
 
 Services/                  Logique métier et accès Google
   AppServices.cs           Conteneur partagé : settings, repos, cache libellés, synchro contacts,
-                           moteur multi-synchros, compte courant, historique (LogActivity/LogContactActivity)
-  AppPaths.cs              Chemins des dossiers/fichiers (par compte, modèles, mails, activité, Téléchargements)
-  GoogleAuth.cs            OAuth2 (récepteur loopback, scopes unifiés, déconnexion)
+                           compte courant, historique (LogActivity/LogContactActivity), SyncFormsAsync
+  AppPaths.cs              Chemins des dossiers/fichiers (par compte, modèles, mails, activité, formulaires, Téléchargements)
+  GoogleAuth.cs            OAuth2 (récepteur loopback, scopes unifiés, vérif des scopes du jeton, déconnexion)
   GoogleContactsService.cs People API : contacts, libellés, membres, appartenances (dont SetContactMembershipsAsync)
   GoogleSheetsService.cs   Sheets/Drive : création, partage, export CSV/XLSX, renommage, lecture de plage, existence
+  GoogleFormsService.cs    Forms API + Drive : lister, créer (vierge / depuis modèle local via CreateItem),
+                           activer la collecte e-mail vérifié à la création, exporter la structure (modèle),
+                           renommer, supprimer, lire questions (type/options) et réponses (e-mail vérifié)
   GoogleErrors.cs          Traduction des erreurs Google en messages FR
   AdherentRepository.cs    Lecture/écriture adherents.json
   SheetRepository.cs       Lecture/écriture worksheets.json
   ActivityRepository.cs    Lecture/écriture activity.json (historique, enums en texte)
+  FormRepository.cs        Registre local des Google Forms (forms.json : libellé, mapping, règles de réponses)
+  FormTemplateRepository.cs Modèles de formulaire locaux (fichiers JSON dans modeles_forms : lister/charger/enregistrer)
   SettingsService.cs       Lecture/écriture settings.json (+ seed config.json)
   BrowserService.cs        Détection navigateurs, ouverture liens, Gmail compose
   CsvContactImporter.cs    CSV/Excel → adhérents : mapping par lettre, détection d'en-têtes, incomplets, conversions
   ExcelContactImporter.cs  Lecture d'un .xlsx (ClosedXML) → lignes → CsvContactImporter
   CsvContactExporter.cs    Export adhérents → CSV
   EmailValidator.cs        Validation + correction d'e-mails (Suggest, IsValidOrFixable)
-  PendingMatcher.cs        Niveau de correspondance (Connue/Doute/Inconnue) d'une inscription incomplète
   ErrorLogger.cs           Journalise les plantages dans log_error.txt
   EmlParser.cs             Analyse d'un .eml (objet + corps)
   MailTemplateStore.cs     Modèles de mail (un JSON par modèle)
@@ -83,21 +87,28 @@ Helpers/
 
 Converters/
   PhoneConverters.cs       Téléphone formaté + couleur rouge si invalide
-  SyncConverters.cs        État synchro → vert/rouge/textes, bool → Visibility, niveau de correspondance
-                           → couleur/texte, ActionBrush (couleur d'action d'historique)
+  SyncConverters.cs        bool → Visibility, ActionBrush (couleur d'action d'historique)
 
 Views/                     Écrans (UserControl) et fenêtres (Window)
+  FormsView                Page Google Forms : liste + créer + Réponses/Configuration/Supprimer + bandeau de rappel
+  CreateFormWindow         Modale de création d'un Form (nom + vierge / modèle local via liste ou import fichier)
+  FormConfigWindow         Configuration d'un Form : renommer, libellé, correspondances champ↔question,
+                           règles de réponses (choix unique), ⭐ enregistrer comme modèle
+  FormSettingsReminderWindow Rappel illustré (capture réelle) des réglages Forms à activer à la main
+  ResponseDetailWindow     Modale : réponses d'un répondant (surlignage jaune des diffs + maj du contact)
+  PreinscriptionView       Page Préinscriptions : sélecteur de formulaire → réponses (contacts) + alertes + validation
   … + fenêtres partagées : PickLabelsWindow (select2 multi générique), LabelListWindow (puces libellés),
-    SyncWarningWindow (alertes synchro), SyncTraceWindow (trace synchro), PendingMatchWindow (correspondances),
-    ContactDetailsWindow (détails figés d'un contact), ConfirmWindow (confirmations stylées)
+    ContactDetailsWindow (détails figés d'un contact), ConfirmWindow (confirmations stylées),
+    InputDialog (saisie simple)
 ```
 
 ### 2.3 Navigation
 `MainWindow` héberge un menu latéral (RadioButtons) et un `ContentControl`. Les pages sont des
 `UserControl` instanciés une fois puis affichés par échange de contenu avec animation.
-Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Synchro auto, Historique, Paramètres**.
-La page **Inscriptions non finalisées** (`PendingView`) existe aussi mais son entrée de menu est
-**masquée** : on y accède via le bouton de la page **Association** (§8bis) ou le lien de la cloche (§11.4).
+Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Google Forms, Préinscriptions, Historique, Paramètres**.
+La page **Préinscriptions** (`PreinscriptionView`, §11) s'ouvre sur un **sélecteur de formulaire** (tableau)
+puis affiche les **réponses** du formulaire choisi ; on peut aussi y arriver directement depuis la page
+**Google Forms** (bouton **👥** ou double-clic).
 
 Chaque page peut implémenter `IActivableView.OnActivated()` (rafraîchissement à l'affichage).
 
@@ -107,20 +118,15 @@ le focus clavier. Sa remontée d'arbre gère les `ContentElement` (ex. `Hyperlin
 
 ### 2.4 État partagé (`AppServices`)
 Instance unique passée à toutes les vues. Contient :
-- `Settings`, `SettingsService`, `Contacts`, `Sheets`, repositories, `Adherents` (collection observable),
+- `Settings`, `SettingsService`, `Contacts`, `Sheets`, `Forms`, repositories, `Adherents` (collection observable),
 - le **compte courant**, le **cache des libellés** (+ événement `LabelsChanged`),
-- la collection **`AutoSyncs`** et le **moteur de synchros** (§11),
-- la collection **`Pending`** (inscriptions incomplètes, reconstruite à chaque synchro),
-- la collection **`Activities`** (historique) + `LogActivity(...)` / `LogContactActivity(...)`.
-- `GetLabelsAsync(forceRefresh)` rafraîchit le cache et appelle `ReconcileLabelNames()` : les noms de
-  libellés mémorisés dans les synchros et les inscriptions en attente sont réalignés (fix renommage).
+- la collection **`Activities`** (historique) + `LogActivity(...)` / `LogContactActivity(...)`,
+- `GetLabelsAsync(forceRefresh)` (cache libellés + `LabelsChanged`) et `SyncFormsAsync()` (registre Forms
+  synchronisé depuis Drive, en préservant libellé/mapping/règles par formulaire).
 
 ### 2.5 Boucle temps réel (timer 1 s)
-`MainWindow` fait tourner un unique `DispatcherTimer` (1 s) qui, tant que l'appli est visible :
-- affiche/masque la **bannière hors ligne** ;
-- appelle `AppServices.TouchSyncs()` → rafraîchit minuteurs / états / pourcentages ;
-- si en ligne, appelle `AppServices.RunDueSyncs()` → lance les synchros **complètes** échues (concurrentes) ;
-- met à jour l'icône **🔄** (nombre de synchros en marche + pastille jaune d'alerte).
+`MainWindow` fait tourner un unique `DispatcherTimer` (1 s) qui affiche/masque la **bannière hors ligne**
+quand l'appli est visible.
 
 ---
 
@@ -128,14 +134,16 @@ Instance unique passée à toutes les vues. Contient :
 
 Racine : `%LOCALAPPDATA%\BadmintonClub\`
 ```
-settings.json                    Paramètres globaux (dont la liste des synchros auto)
-log_error.txt                    Journal des plantages (diagnostic)
-google_token/                    Jetons OAuth (par « user »)
-accounts/<email>/adherents.json  Adhérents du compte
-accounts/<email>/worksheets.json Registre des Sheets créés par le compte
-accounts/<email>/activity.json   Historique des activités du compte
-modeles/                         Modèles de Sheets (Excel/CSV)
-mails/                           Modèles de mail (.json : nom, objet, corps)
+settings.json                            Paramètres globaux (navigateur, compte courant)
+log_error.txt                            Journal des plantages (diagnostic)
+google_token/                            Jetons OAuth (par « user »)
+accounts/<email>/adherents.json          Adhérents du compte
+accounts/<email>/worksheets.json         Registre des Sheets créés par le compte
+accounts/<email>/forms.json              Registre des Google Forms du compte (libellé, mapping, règles)
+accounts/<email>/activity.json           Historique des activités du compte
+modeles/                                 Modèles de Sheets (Excel/CSV)
+modeles_forms/                           Modèles de Google Forms (structure JSON réutilisable)
+mails/                                   Modèles de mail (.json : nom, objet, corps)
 ```
 Le compte « par défaut » (avant connexion) conserve les fichiers à la racine (rétro-compat + migration).
 
@@ -145,7 +153,11 @@ Le compte « par défaut » (avant connexion) conserve les fichiers à la racine
 
 - **Fichier requis** : `client_secret.json` (identifiants OAuth « Application de bureau »).
 - **Autorisation unique partagée** (`GoogleAuth.AllScopes`) : `contacts`, `userinfo.email`,
-  `userinfo.profile`, `spreadsheets`, `drive` → un seul écran de consentement, un seul jeton.
+  `userinfo.profile`, `spreadsheets`, `drive`, `forms.body`, `forms.responses.readonly` → un seul
+  écran de consentement, un seul jeton.
+- **Vérification des scopes** : après autorisation, `AuthorizeAsync` vérifie que le jeton stocké
+  couvre bien les scopes critiques (contacts, spreadsheets, drive, forms). Sinon (jeton ancien ou
+  case décochée), il est supprimé et un **consentement complet** est redemandé automatiquement.
 - **Récepteur loopback** maison (ShellExecute, `http://127.0.0.1:<port>/authorize/`). Connexion annulable.
 - **Mode Test Google** : chaque compte doit être **utilisateur de test** ; jetons ~7 jours.
 
@@ -163,7 +175,8 @@ Le compte « par défaut » (avant connexion) conserve les fichiers à la racine
 ## 6. Page **Contacts**
 
 Tableau paginé : sélection, Nom, Prénom, **Téléphone** (formaté, rouge si invalide), **E-mail**
-(lien Gmail), **Ajouté le** (`DateInscription`), Actions (✏ Modifier / 🏷 Libellés / 🗑 Supprimer).
+(lien Gmail), **Mails secondaires** (bouton **✉ N** → message box listant les adresses, « N/A » si aucune),
+**Ajouté le** (`DateInscription`), Actions (✏ Modifier / 🏷 Libellés / 🗑 Supprimer).
 
 - **Pagination** : 20 / 50 / 100 par page ; tri par en-tête ; copie de cellule (Ctrl+C).
 - **Filtres (barre)** : recherche, **filtre par libellé** (multiselect + « (Sans libellé) »),
@@ -207,26 +220,8 @@ Vue centrée sur les **personnes**, avec gestion fine des libellés.
   voulu en un seul appel).
 - **Sélection multiple** : barre avec **👥 Associer (N)** et **✂ Dissocier (N)**, chacune ouvrant une
   `PickLabelsWindow` pour choisir les libellés à ajouter/retirer aux personnes cochées.
-- **⏳ Inscriptions non finalisées** : actif quand exactement un libellé est sélectionné ; ouvre §8bis pré-filtré.
+- **📝 Préinscriptions** : ouvre la page **Préinscriptions** (§11 ; choisir un formulaire depuis Google Forms).
 - Toutes les associations/dissociations sont **journalisées** (instantané du contact figé).
-
----
-
-## 8bis. Page **Inscriptions non finalisées** (`PendingView`)
-
-**Lecture seule** (l'appli n'écrit jamais dans le Sheet). Liste les personnes d'un Sheet synchronisé
-ayant renseigné des infos (nom/prénom/tél) mais dont l'**e-mail est manquant OU au mauvais format non
-rattrapable** (une faute rattrapable — virgule→point, espaces — devient un contact normal). Reconstruite
-à chaque synchro.
-
-- **Accès** : bouton de la page Association, ou lien de la cloche (§11.4). Entrée de menu masquée.
-- **Colonne E-mail** : **« mail non renseigné »** en rouge si vide, sinon l'adresse en **jaune** +
-  « (format incorrect) ».
-- **Colonne Correspondance** (`PendingMatcher`) : ● Connue (vert) / ● Doute (jaune) / ● Inconnue (rouge).
-- **Filtres** : recherche (nom/prénom/tél/e-mail), par libellé, par niveau de correspondance.
-- **👁 Correspondances** : modale lecture seule (`PendingMatchWindow`).
-- **✔ Valider** (par ligne) et **✔ Valider (N)** (groupé) : retire de la liste, avec **confirmation**
-  rappelant de compléter l'info dans le Sheet (sinon réapparition à la synchro suivante). Boutons en logos.
 
 ---
 
@@ -248,55 +243,90 @@ Liste tous les classeurs accessibles. Filtres : recherche + **période** (Du / A
 
 ---
 
-## 11. Page **Synchro auto** (multi-synchros)
+## 10bis. Page **Google Forms**
 
-Plusieurs synchros reliant chacune **un Google Sheet à un libellé cible**.
+Calquée sur la page Google Sheets : gère des Google Forms génériques (registre local `forms.json`,
+synchronisé depuis Drive via `mimeType='application/vnd.google-apps.form'`). Filtres recherche + période.
 
-### 11.1 Règles
-- Exécution concurrente coopérative sur le thread UI ; **un libellé = une seule synchro** (unicité).
-- Chaque synchro **complète** s'exécute immédiatement à l'activation puis toutes les 5 min.
-- **Brouillon** : une synchro peut être enregistrée **incomplète** (champs manquants). Elle n'est
-  **pas lançable** tant qu'elle n'a pas nom + lien du Sheet + libellé + colonne e-mail
-  (`AutoSyncConfig.IsComplete`) ; sa ligne est affichée en **orange**. `RunDueSyncs`/`StartSync`
-  ignorent les synchros incomplètes.
-- Une synchro **en cours d'exécution** ne peut pas être modifiée.
+- **➕ Créer** (`CreateFormWindow`) : **nom modifiable** + **Vierge** (`GoogleFormsService.CreateBlankFormAsync`)
+  ou **À partir d'un modèle** (modèle **local** choisi dans la liste **ou importé depuis un fichier** ; voir « Créer » ci-dessous).
+- **Par ligne** : **👥 Réponses** (ouvre la page **Préinscriptions** §11 sur ce formulaire ; idem
+  **double-clic**), **⚙ Configuration**, 🗑 Supprimer (Drive). Suppression groupée. Colonnes **Lien du
+  formulaire** (**hyperlien** cliquable → édition) et **Libellé** (libellé Contacts associé).
+- **À la création** : la **collecte d'e-mail « Vérifiées »** (`emailCollectionType=VERIFIED`) est activée
+  **automatiquement** (best-effort, `TryEnableVerifiedEmailAsync`) — les répondants se connectent, ce qui
+  fiabilise le regroupement des réponses par personne.
+- **Bandeau de rappel** (au-dessus du tableau de la page) : rappelle d'activer **à la main** les deux
+  réglages non exposés par l'API — **« Autoriser la modification des réponses »** et **« Limiter à une
+  réponse »** ; bouton **🖼 Voir l'explication** → `FormSettingsReminderWindow` (maquette illustrée).
+- **⚙ Configuration** (`FormConfigWindow`) : **renommer** le formulaire (Drive + titre interne),
+  **associer un libellé** (sélection unique), **associer les réponses aux colonnes du contact**
+  (Prénom / Nom / Téléphone / E-mail / **Mails secondaires** → une **question texte** du formulaire, ou
+  « (aucune correspondance) » ; seules les questions texte sont proposées ; stocké dans `FormRecord.FieldMap`),
+  **paramétrer les réponses des questions à choix unique** — pour chaque option : *Aucun* /
+  **Ajouter à la liste d'attente** / **Annuler l'inscription** (stocké dans `FormRecord.AnswerRules`), et
+  **⭐ Enregistrer comme modèle** (exporte la structure vers un fichier local, voir ci-dessous).
+- **Créer** : **vierge** (`CreateBlankFormAsync`) ou **à partir d'un modèle**. Les modèles sont des
+  **fichiers locaux** (`FormTemplate` JSON dans `%LOCALAPPDATA%\BadmintonClub\modeles_forms`, dépôt
+  `FormTemplateRepository`) décrivant la structure (titre + questions : texte court/long, choix unique/multiple,
+  liste déroulante, date). À la création, on choisit un modèle **dans la liste** (modèles locaux) **ou on
+  importe un fichier** (dropzone / Parcourir) ; dans les deux cas l'app **recrée un nouveau Google Form**
+  via l'API (`CreateFormFromTemplateAsync`, un `batchUpdate` de `CreateItem`). Nécessite l'**API Forms** activée.
 
-### 11.2 Tableau
-Colonnes : **Nom · Libellé cible · Lien · État · Minuteur · Suivi · Actions**.
-- **Suivi** : bouton **📋 Trace** (bleu, si trace) + bouton **⚠ Alerte** (jaune, si alertes).
-- **Actions** : ▶ Démarrer / ⏸ Arrêter, ✏ Modifier, 🗑 Supprimer. Double-clic → modale.
+---
 
-### 11.3 Modale d'ajout/édition (`AutoSyncEditWindow`)
-Nom · **Lien du Sheet** (+ bouton **🔎 Vérifier** : teste l'existence via `SheetExistsAsync`, colore le
-contour du champ vert/rouge) · **Libellé cible** (select2) · lignes début/fin · colonnes ·
-**✨ Remplissage automatique** · **🔍 Tester** · **☑ Associer automatiquement les personnes « connues »** ·
-**Activer**.
-- À l'enregistrement, un **lien renseigné mais inexistant** bloque la sauvegarde (vérifié en ligne) ;
-  un lien vide est autorisé (brouillon).
+## 11. Page **Préinscriptions** (réponses d'un formulaire)
 
-### 11.4 Icône synchro & cloche (header)
-- **🔄** = zone notifications ; **pastille verte** = nombre de synchros en marche ; **pastille jaune ⚠**
-  si au moins une synchro active a des inscriptions non finalisées.
-- Popup : par synchro, **⟳** (synchro immédiate de cette ligne) + **⏸** (suspendre), un **⚠** et un lien
-  **« Voir les inscriptions non finalisées »** (page §8bis pré-filtrée sur son libellé) si elle a des incomplets.
-  La flèche du minuteur tourne en continu (animation).
+La page s'ouvre sur un **sélecteur de formulaire** : un tableau des formulaires (Nom · Libellé · Créé le ·
+bouton **👥 Voir les réponses** ; double-clic aussi). On y accède depuis le menu latéral, la page
+**Association** (📝) ou la page **Google Forms** (👥, qui ouvre directement les réponses).
 
-### 11.5 Moteur (`AppServices.ImportConfigAsync`)
-- Lit les lignes (`A{début}:Z{fin}`), mappe par lettre, corrige les e-mails rattrapables, **upsert par
-  e-mail**, pousse vers Google les vraies différences, **associe** au libellé cible (ajout des manquants)
-  et **dissocie** les membres absents du Sheet.
-- **Inscriptions incomplètes** : e-mail manquant ou mal formé non rattrapable → `Pending` (§8bis).
-- **Option « connues »** : une personne sans e-mail exploitable mais correspondant de façon **certaine**
-  (`MatchLevel.Connue` : ≥ 2 champs, un **seul** contact, avec e-mail valide) est associée via ce contact
-  et retirée des non finalisés. En cas de doute, elle y reste. **Aucune écriture dans le Sheet.**
-- **Doublons d'e-mail** : personnes ayant saisi le même e-mail valide plusieurs fois → associées quand
-  même, mais signalées.
-- **Alertes** (`SyncWarningWindow`) : bouton ⚠ → liste infos manquantes + doublons, filtre par type,
-  lien vers §8bis pré-filtré.
-- **Trace** (`SyncTraceWindow`) : personnes associées au libellé lors de la dernière exécution ; lignes
-  **jaunes** = passées uniquement grâce à l'option « connues ».
-- Ajouts / modifications / associations / dissociations sont **journalisés** (« Synchro auto « Nom » »),
-  uniquement sur de vraies actions (pas de spam en régime stable).
+Le **visualiseur des réponses** d'un formulaire affiche en **titre le nom du formulaire** (avec un bouton
+**← Formulaires** pour revenir au sélecteur) et les répondants **comme des contacts** (mêmes colonnes) :
+**Rang · Nom · Prénom · Téléphone · E-mail · Mails secondaires · Répondu le · Modifié le · Statut**.
+Sous le titre : un **filtre de recherche** (comme la page Contacts) + boutons **⏳ Liste d'attente** et **✔ Valider**.
+
+- **Statut** : **En préinscription** (ni en attente, ni annulée), **En attente** (règle liste d'attente) ou
+  **Annulée** (règle annulation).
+- **Vue par défaut** : uniquement les **préinscrits** (**En préinscription**). Les personnes **En attente**
+  n'apparaissent **que** dans **⏳ Liste d'attente** ; la colonne **Rang** n'est visible que dans ce mode.
+- **Sélection** : case **« Tout sélectionner »** dans l'**en-tête** du tableau (comme les autres pages).
+- **Colonne Alerte** : bouton **⚠** (→ message box listant **toutes** les alertes du répondant) ou **« N/A »**
+  s'il n'y en a aucune. Alertes possibles : **absent de mes contacts**, **déjà associé au libellé**,
+  **infos différentes** du contact (champs listés), **e-mail au format invalide**.
+- **Ligne rouge + bouton ➕ Contacts** : répondant **absent de mes contacts** → bouton pour l'ajouter
+  directement aux contacts (crée le contact, push Google, journalisé).
+- **Ligne jaune** : répondant présent dans mes contacts mais dont une **info diffère** (nom, prénom ou téléphone).
+- **E-mail en rouge** : format d'e-mail invalide (les fautes rattrapables — virgule→point, espaces — sont
+  **corrigées automatiquement**).
+- **Regroupement** : les soumissions multiples d'une même personne (même e-mail, insensible à la casse) sont
+  **fusionnées en une ligne** (la plus récente fait foi).
+- **Mails secondaires** : bouton **✉ N** (→ message box) = union du contact existant et de la réponse
+  (si la colonne « Mails secondaires » est mappée) ; « N/A » sinon. Repris à la validation.
+- **Modifié le** : date de **dernière modification** du formulaire par le répondant (`LastSubmittedTime`
+  postérieure à la 1re soumission) ; « N/A » s'il n'a pas modifié sa réponse.
+- **👁 Réponses** → détail avec **surlignage jaune** des réponses qui **diffèrent** du contact (affiche la
+  valeur actuelle) + bouton **💾 Mettre à jour le contact** pour appliquer les nouvelles infos.
+
+### 11.1 Lecture des réponses
+- `GoogleFormsService.GetFormQuestionsAsync` (id + intitulé) puis `ListResponsesAsync` (réponses + e-mail
+  vérifié). Les répondants sont **regroupés par e-mail vérifié** (identité « qui a répondu », et **non**
+  l'e-mail saisi) ; la **dernière soumission** fait foi, la **1re** donne la place dans la file d'attente.
+- Champs **Prénom/Nom/Téléphone/Mails secondaires** extraits via le **mapping** manuel du formulaire
+  (`FormRecord.FieldMap`) ; **repli sur l'auto-détection** (`DetectContactField`) uniquement si **aucune**
+  correspondance n'a été configurée. L'**E-mail** affiché est l'e-mail vérifié du répondant.
+- **👁 Réponses** (par ligne) → `ResponseDetailWindow` : **toutes les réponses** de la personne, question
+  par question.
+
+### 11.2 Liste d'attente & validation
+- **⏳ Liste d'attente** : bascule qui n'affiche que les répondants dont une réponse déclenche la règle
+  « liste d'attente » (§10bis Configuration), **triés par date de réponse croissante** (priorité au plus
+  ancien) avec un **rang** (#1, #2…).
+- **Colonne Statut** : *En préinscription* / *En attente* / *Annulée*, déduite des règles de réponses du formulaire.
+- **✔ Valider (N)** (sélection multiple) : upsert des adhérents **par e-mail**, contact Google créé/mis à
+  jour, **association au libellé du formulaire**, journalisation. Les réponses **annulées** sont exclues ;
+  nécessite un **libellé associé** (page Google Forms → ⚙ Configuration).
+- **Lecture seule** côté Google : aucune écriture dans le formulaire ni ses réponses.
 
 ---
 
@@ -330,7 +360,7 @@ Journal local **par compte** (`activity.json`, 3000 entrées max, le plus récen
 
 - **Actions journalisées** : Ajout, Modification (avec **ancienne/nouvelle valeur**), Suppression,
   Association, Dissociation — depuis les actions manuelles, la modale « Libellés », l'import manuel et
-  la synchro auto.
+  la validation d'une préinscription.
 - **Trois tableaux** choisis par **radios** : **Utilisateurs**, **Libellés**, **Sheets**.
 - **Filtres** : par **action** (combo), par **période** (Du / Au), et par **cible** (champ texte).
 - Colonnes : **Date · Action** (colorée via `ActionBrush`) **· Cible · Détails · Ancienne · Nouvelle valeur**.
@@ -361,5 +391,5 @@ Journal local **par compte** (`activity.json`, 3000 entrées max, le plus récen
 | `insufficient authentication scopes` | Permissions non toutes accordées | Se déconnecter/reconnecter en **cochant tout** |
 | `access_denied` (Accès bloqué) | Compte non testeur | Ajouter le compte en **Utilisateur de test** |
 | `Contact must always be in at least one contact group` | Retrait de la dernière appartenance | Géré : `myContacts` toujours garanti (§13) |
-| `People/Sheets/Drive API not enabled` | API non activée | Activer l'API dans le projet Google Cloud |
+| `People/Sheets/Drive/Forms API not enabled` | API non activée | Activer l'API concernée (dont **Google Forms API** pour les préinscriptions) dans le projet Google Cloud |
 | `client_secret.json introuvable` | Fichier manquant | Placer `client_secret.json` à côté de l'exe |

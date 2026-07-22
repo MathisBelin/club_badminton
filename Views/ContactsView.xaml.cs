@@ -299,6 +299,17 @@ public partial class ContactsView : UserControl, IActivableView
             BrowserService.OpenGmailCompose(a.Email);
     }
 
+    private void SecondaryEmails_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not Adherent a || !a.HasSecondaryEmails)
+            return;
+
+        var list = string.Join("\n", a.SecondaryEmails.Select(m => "• " + m));
+        MessageBox.Show(Window.GetWindow(this), list,
+            $"E-mails secondaires — {a.Prenom} {a.Nom}".Trim(),
+            MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     // ---- Recherche avancée : filtre par libellé --------------------------
 
     /// <summary>Charge/rafraîchit les options du filtre par libellé.</summary>

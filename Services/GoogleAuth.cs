@@ -27,7 +27,10 @@ public static class GoogleAuth
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/userinfo.profile",
         "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
+        "https://www.googleapis.com/auth/drive",
+        // Préinscriptions : créer/éditer le formulaire Google Forms et lire ses réponses.
+        "https://www.googleapis.com/auth/forms.body",
+        "https://www.googleapis.com/auth/forms.responses.readonly"
     };
 
     /// <summary>Clé de jeton unique et partagée (un seul compte, un seul jeton pour toute l'appli).</summary>
@@ -94,7 +97,65 @@ public static class GoogleAuth
         // ShellExecute (et non « cmd start »), ce qui évite que l'URL d'autorisation
         // soit tronquée au premier « & » sur Windows (bug « response_type manquant »).
         var receiver = new LoopbackBrowserCodeReceiver(promptSelectAccount);
-        return await new AuthorizationCodeInstalledApp(flow, receiver).AuthorizeAsync(user, ct);
+        var credential = await new AuthorizationCodeInstalledApp(flow, receiver).AuthorizeAsync(user, ct);
+
+        // La bibliothèque réutilise un jeton stocké tant qu'il est rafraîchissable, SANS
+        // revérifier les scopes accordés. Un jeton créé avant l'ajout d'un scope (ou pour
+        // lequel une case a été décochée au consentement) laisserait donc l'appli se
+        // connecter silencieusement, puis échouer avec « insufficient authentication scopes ».
+        // Si le jeton ne couvre pas les scopes critiques, on le supprime et on force un
+        // consentement complet (au lieu de laisser l'utilisateur sur une session cassée).
+        //
+        // IMPORTANT : opération faite AU PLUS UNE FOIS par exécution, et UNIQUEMENT pour les
+        // scopes critiques réellement configurés (contacts/sheets/drive). Sinon un scope que
+        // Google n'accorde pas encore (ex. Forms non activé côté projet) provoquerait une
+        // boucle qui supprimerait le jeton à chaque appel et casserait toute l'appli.
+        if (!_reconsentAttempted && !TokenCoversRequiredScopes(credential.Token))
+        {
+            _reconsentAttempted = true;
+            try
+            {
+                await flow.DeleteTokenAsync(user, ct);
+                var consentReceiver = new LoopbackBrowserCodeReceiver(promptSelectAccount: true);
+                credential = await new AuthorizationCodeInstalledApp(flow, consentReceiver).AuthorizeAsync(user, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // annulation volontaire : on laisse remonter
+            }
+        }
+
+        return credential;
+    }
+
+    /// <summary>Garantit qu'on ne relance le consentement (destructif) qu'une seule fois par exécution.</summary>
+    private static bool _reconsentAttempted;
+
+    /// <summary>
+    /// Scopes indispensables aux fonctionnalités de l'appli, renvoyés tels quels par Google
+    /// (contrairement à userinfo.email/profile que Google peut normaliser en openid/email/profile).
+    /// Sert à détecter un jeton stocké aux permissions incomplètes.
+    /// </summary>
+    // NB : on n'y met PAS les scopes Forms. Tant que l'API Forms n'est pas activée / accordée,
+    // le jeton ne les contient pas ; les exiger ici déclencherait un re-consentement destructif
+    // en boucle. Les fonctionnalités Forms signalent elles-mêmes un scope manquant le cas échéant.
+    private static readonly string[] RequiredScopes =
+    {
+        "https://www.googleapis.com/auth/contacts",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    };
+
+    /// <summary>Vrai si le jeton accorde tous les scopes critiques (ou si l'info est absente).</summary>
+    private static bool TokenCoversRequiredScopes(TokenResponse? token)
+    {
+        var granted = token?.Scope;
+        // Scope inconnu (ancien jeton sans info) : on ne force pas de reconsentement.
+        if (string.IsNullOrWhiteSpace(granted))
+            return true;
+
+        var set = granted.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return RequiredScopes.All(s => set.Contains(s, StringComparer.OrdinalIgnoreCase));
     }
 }
 

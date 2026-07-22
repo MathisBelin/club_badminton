@@ -43,6 +43,17 @@ public class Adherent : INotifyPropertyChanged
 
     public DateTime DateInscription { get; set; } = DateTime.Now;
 
+    /// <summary>E-mails secondaires (facultatifs) : ajoutés comme adresses supplémentaires du contact Google.</summary>
+    public List<string> SecondaryEmails { get; set; } = new();
+
+    /// <summary>Vrai si le contact a au moins un e-mail secondaire (pour l'affichage de la colonne).</summary>
+    [JsonIgnore]
+    public bool HasSecondaryEmails => SecondaryEmails is { Count: > 0 };
+
+    /// <summary>Libellé compact de la colonne mails secondaires (« ✉ N » ou « N/A »).</summary>
+    [JsonIgnore]
+    public string SecondaryEmailsBadge => HasSecondaryEmails ? $"✉ {SecondaryEmails.Count}" : "N/A";
+
     /// <summary>Ressource Google du contact lié ("people/xxx"), vide si non synchronisé.</summary>
     public string GoogleResourceName { get; set; } = string.Empty;
 
@@ -69,6 +80,7 @@ public class Adherent : INotifyPropertyChanged
         Prenom = Prenom,
         Telephone = Telephone,
         Email = Email,
+        SecondaryEmails = new List<string>(SecondaryEmails),
         DateInscription = DateInscription,
         GoogleResourceName = GoogleResourceName
     };
@@ -79,6 +91,7 @@ public class Adherent : INotifyPropertyChanged
         Prenom = other.Prenom;
         Telephone = other.Telephone;
         Email = other.Email;
+        SecondaryEmails = new List<string>(other.SecondaryEmails);
         // Id et DateInscription ne changent pas lors d'une modification.
     }
 }

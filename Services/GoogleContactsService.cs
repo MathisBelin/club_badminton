@@ -573,9 +573,8 @@ public class GoogleContactsService
             {
                 new Name { GivenName = adherent.Prenom, FamilyName = adherent.Nom }
             };
-            person.EmailAddresses = string.IsNullOrWhiteSpace(adherent.Email)
-                ? null
-                : new List<EmailAddress> { new EmailAddress { Value = adherent.Email } };
+            var emails = BuildEmails(adherent);
+            person.EmailAddresses = emails.Count > 0 ? emails : null;
             person.PhoneNumbers = string.IsNullOrWhiteSpace(adherent.Telephone)
                 ? null
                 : new List<PhoneNumber> { new PhoneNumber { Value = adherent.Telephone } };
@@ -827,13 +826,31 @@ public class GoogleContactsService
             }
         };
 
-        if (!string.IsNullOrWhiteSpace(adherent.Email))
-            person.EmailAddresses = new List<EmailAddress> { new EmailAddress { Value = adherent.Email } };
+        var emails = BuildEmails(adherent);
+        if (emails.Count > 0)
+            person.EmailAddresses = emails;
 
         if (!string.IsNullOrWhiteSpace(adherent.Telephone))
             person.PhoneNumbers = new List<PhoneNumber> { new PhoneNumber { Value = adherent.Telephone } };
 
         var created = await _service!.People.CreateContact(person).ExecuteAsync(ct);
         return created.ResourceName;
+    }
+
+    /// <summary>Construit la liste des e-mails du contact : principal puis secondaires (dédupliqués).</summary>
+    private static List<EmailAddress> BuildEmails(Adherent adherent)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<EmailAddress>();
+        void Add(string? v)
+        {
+            v = v?.Trim();
+            if (!string.IsNullOrWhiteSpace(v) && seen.Add(v))
+                list.Add(new EmailAddress { Value = v });
+        }
+        Add(adherent.Email);
+        foreach (var se in adherent.SecondaryEmails)
+            Add(se);
+        return list;
     }
 }

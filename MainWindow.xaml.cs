@@ -13,10 +13,10 @@ public partial class MainWindow : Window
     private readonly ContactsView _contactsView;
     private readonly LabelsView _labelsView;
     private readonly AssociationView _associationView;
-    private readonly PendingView _pendingView;
     private readonly EmailView _emailView;
     private readonly SheetsView _sheetsView;
-    private readonly AutoSyncView _autoSyncView;
+    private readonly FormsView _formsView;
+    private readonly PreinscriptionView _preinscriptionView;
     private readonly HistoryView _historyView;
     private readonly SettingsView _settingsView;
 
@@ -27,10 +27,10 @@ public partial class MainWindow : Window
         _contactsView = new ContactsView(_services);
         _labelsView = new LabelsView(_services);
         _associationView = new AssociationView(_services);
-        _pendingView = new PendingView(_services);
         _emailView = new EmailView(_services);
         _sheetsView = new SheetsView(_services);
-        _autoSyncView = new AutoSyncView(_services);
+        _formsView = new FormsView(_services);
+        _preinscriptionView = new PreinscriptionView(_services);
         _historyView = new HistoryView(_services);
         _settingsView = new SettingsView(_services);
 
@@ -41,18 +41,14 @@ public partial class MainWindow : Window
             _associationView.ShowForLabel(resourceName);
         };
 
-        // Depuis la page Association : ouvrir « Personnes en attente » filtré sur le libellé courant.
-        _associationView.OpenPendingRequested += resourceName =>
-        {
-            NavPending.IsChecked = true;
-            _pendingView.ShowForLabel(resourceName);
-        };
+        // Depuis la page Association : ouvrir la page Préinscriptions.
+        _associationView.OpenPreinscriptionsRequested += () => NavPreinscription.IsChecked = true;
 
-        // Depuis la modale d'alerte d'une synchro : idem, filtré sur le libellé de la synchro.
-        _autoSyncView.OpenPendingRequested += resourceName =>
+        // Depuis la page Google Forms : ouvrir la page Préinscriptions sur les réponses d'un formulaire.
+        _formsView.OpenResponsesRequested += form =>
         {
-            NavPending.IsChecked = true;
-            _pendingView.ShowForLabel(resourceName);
+            NavPreinscription.IsChecked = true;
+            _preinscriptionView.ShowForForm(form);
         };
 
         // Sélection initiale : Contacts (le contenu est prêt derrière l'écran de connexion).
@@ -73,88 +69,11 @@ public partial class MainWindow : Window
 
     private static bool IsOnline() => System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable();
 
-    /// <summary>Tick 1 s : rafraîchit l'affichage, lance les synchros dues, met à jour la cloche.</summary>
+    /// <summary>Tick 1 s : affiche/masque la bannière hors ligne.</summary>
     private void OnTick()
     {
         var appVisible = AppRoot.Visibility == Visibility.Visible;
-        var online = IsOnline();
-        OfflineWarning.Visibility = appVisible && !online ? Visibility.Visible : Visibility.Collapsed;
-
-        if (!appVisible)
-        {
-            NotifArea.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        _services.TouchSyncs();               // rafraîchit minuteurs / états (bindings)
-        if (online)
-            _services.RunDueSyncs();           // lance les synchros échues (concurrentes)
-
-        UpdateNotif();
-    }
-
-    /// <summary>Met à jour la pastille de la cloche (nombre de synchros en marche).</summary>
-    private void UpdateNotif()
-    {
-        var count = _services.AutoSyncs.Count(s => s.Enabled);
-        NotifArea.Visibility = Visibility.Visible;
-        NotifBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        NotifCount.Text = count.ToString();
-
-        // Pastille jaune si au moins une synchro active a des inscriptions non finalisées.
-        var hasIncomplete = _services.AutoSyncs.Any(s => s.Enabled && s.HasIncomplete);
-        NotifWarnBadge.Visibility = hasIncomplete ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>Ouvre la page « Inscriptions non finalisées » filtrée sur le libellé de la synchro.</summary>
-    private void NotifPending_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as System.Windows.Documents.Hyperlink)?.DataContext is Models.AutoSyncConfig c)
-        {
-            NotifPopup.IsOpen = false;
-            NavPending.IsChecked = true;
-            _pendingView.ShowForLabel(c.LabelResourceName);
-        }
-    }
-
-    /// <summary>Remplit la liste du popup (les minuteurs s'actualisent ensuite par binding).</summary>
-    private void RefreshNotifList()
-    {
-        var running = _services.AutoSyncs.Where(s => s.Enabled).ToList();
-        NotifList.ItemsSource = running;
-        NotifEmpty.Visibility = running.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void NotifButton_Click(object sender, RoutedEventArgs e)
-    {
-        NotifPopup.IsOpen = !NotifPopup.IsOpen;
-        if (NotifPopup.IsOpen)
-            RefreshNotifList();
-    }
-
-    private void Suspend_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is Models.AutoSyncConfig c)
-        {
-            _services.StopSync(c);
-            RefreshNotifList();
-            UpdateNotif();
-        }
-    }
-
-    /// <summary>Synchronise immédiatement une seule synchro (bouton logo de sa ligne).</summary>
-    private void SyncOne_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is not Models.AutoSyncConfig c)
-            return;
-        if (!IsOnline())
-        {
-            MessageBox.Show(this, "Pas de connexion Internet : la synchronisation est en pause.",
-                "Synchronisation", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        if (!c.IsImporting)
-            _ = _services.RunSyncNowAsync(c);
+        OfflineWarning.Visibility = appVisible && !IsOnline() ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task CheckForUpdateAsync()
@@ -259,10 +178,6 @@ public partial class MainWindow : Window
         AppRoot.Visibility = Visibility.Visible;
         await SyncAllAsync();
 
-        // Réarme les synchros activées : elles s'exécutent tout de suite puis toutes les 5 min
-        // (déclenchées par le tick de statut, tant que l'app est visible et en ligne).
-        _services.ArmEnabledSyncs();
-
         _ = CheckForUpdateAsync(); // en arrière-plan, non bloquant
     }
 
@@ -272,10 +187,12 @@ public partial class MainWindow : Window
         _contactsView.ResetView();
         _labelsView.ResetView();
         _sheetsView.ResetView();
+        _formsView.ResetView();
 
         await _contactsView.AutoSyncContactsAsync();
         await _labelsView.AutoLoadAsync();
         await _sheetsView.AutoSyncAsync();
+        await _formsView.AutoSyncAsync();
     }
 
     private void UpdateAccountUi(string email)
@@ -291,10 +208,10 @@ public partial class MainWindow : Window
             "contacts" => _contactsView,
             "labels" => _labelsView,
             "association" => _associationView,
-            "pending" => _pendingView,
             "email" => _emailView,
             "sheets" => _sheetsView,
-            "autosync" => _autoSyncView,
+            "forms" => _formsView,
+            "preinscription" => _preinscriptionView,
             "history" => _historyView,
             "settings" => _settingsView,
             _ => null

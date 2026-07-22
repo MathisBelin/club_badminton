@@ -4,7 +4,7 @@
 ;   dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "Club de Badminton"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Club de Badminton"
 #define MyAppExeName "BadmintonClub.exe"
 #define PublishDir "..\bin\Release\net8.0-windows\win-x64\publish"
@@ -43,5 +43,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Lancer {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+
 
 

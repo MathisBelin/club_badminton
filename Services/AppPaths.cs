@@ -25,6 +25,11 @@ public static class AppPaths
 
     public static void EnsureModelsFolder() => Directory.CreateDirectory(ModelsFolder);
 
+    /// <summary>Dossier de stockage des modèles de Google Forms (structure JSON réutilisable).</summary>
+    public static string FormModelsFolder => Path.Combine(DataFolder, "modeles_forms");
+
+    public static void EnsureFormModelsFolder() => Directory.CreateDirectory(FormModelsFolder);
+
     /// <summary>Dossier « Téléchargements » de l'utilisateur (repli sur le profil si absent).</summary>
     public static string DownloadsFolder
     {
@@ -59,6 +64,13 @@ public static class AppPaths
         SanitizeAccount(account) == "default"
             ? WorksheetsFile
             : Path.Combine(AccountFolder(account), "worksheets.json");
+
+    /// <summary>Registre local des Google Forms connus du compte (dont les modèles).</summary>
+    public static string FormsFileFor(string account) =>
+        SanitizeAccount(account) == "default"
+            ? Path.Combine(DataFolder, "forms.json")
+            : Path.Combine(AccountFolder(account), "forms.json");
+
 
     /// <summary>Historique des activités par compte.</summary>
     public static string ActivityFileFor(string account) =>

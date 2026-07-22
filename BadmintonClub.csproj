@@ -11,7 +11,7 @@
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
-    <Version>1.1.1</Version>
+    <Version>1.2.0</Version>
     <Product>Club de Badminton</Product>
     <AssemblyTitle>Club de Badminton</AssemblyTitle>
     <Company>Club de Badminton</Company>
@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <Resource Include="assets\app.ico" />
+    <Resource Include="assets\form_settings_help.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +35,7 @@
     <PackageReference Include="Google.Apis.PeopleService.v1" Version="1.*" />
     <PackageReference Include="Google.Apis.Sheets.v4" Version="1.*" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.*" />
+    <PackageReference Include="Google.Apis.Forms.v1" Version="1.*" />
     <PackageReference Include="ClosedXML" Version="0.104.*" />
   </ItemGroup>
 
@@ -44,6 +46,8 @@
   </ItemGroup>
 
 </Project>
+
+
 
 
 

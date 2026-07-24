@@ -308,8 +308,14 @@
             <Setter Property="EnableColumnVirtualization" Value="True" />
             <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
             <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <!-- Fenêtre réduite : au lieu d'écraser les colonnes (largeur minimale sur les colonnes
+                 extensibles des tableaux), on défile horizontalement (barre standard, en bas). -->
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
             <!-- Désélectionne la cellule quand on clique/focus hors du tableau. -->
             <EventSetter Event="LostKeyboardFocus" Handler="DataGrid_LostKeyboardFocus" />
+            <!-- Active le défilement tactile (panning) horizontal + vertical. -->
+            <EventSetter Event="Loaded" Handler="DataGrid_Loaded" />
         </Style>
 
         <Style TargetType="DataGridColumnHeader">

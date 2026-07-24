@@ -29,7 +29,9 @@ public static class ProgressRunner
             await action();
             return new BatchResult(1, 0, null);
         }
-        catch (GoogleSyncException ex)
+        // Erreurs « attendues » (Google ou application web) : leur message est déjà lisible,
+        // il est renvoyé à l'appelant qui l'affiche dans la page plutôt que de planter.
+        catch (Exception ex) when (ex is GoogleSyncException or WebFormsException)
         {
             return new BatchResult(0, 1, ex.Message);
         }
@@ -62,7 +64,7 @@ public static class ProgressRunner
                     await action(items[i]);
                     ok++;
                 }
-                catch (GoogleSyncException ex)
+                catch (Exception ex) when (ex is GoogleSyncException or WebFormsException)
                 {
                     failed++;
                     lastError = ex.Message;

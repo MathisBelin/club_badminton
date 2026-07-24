@@ -71,6 +71,11 @@ public static class AppPaths
             ? Path.Combine(DataFolder, "forms.json")
             : Path.Combine(AccountFolder(account), "forms.json");
 
+    /// <summary>Décisions locales sur les réponses des formulaires (validés, statuts, différences ignorées).</summary>
+    public static string FormStatesFileFor(string account) =>
+        SanitizeAccount(account) == "default"
+            ? Path.Combine(DataFolder, "form_states.json")
+            : Path.Combine(AccountFolder(account), "form_states.json");
 
     /// <summary>Historique des activités par compte.</summary>
     public static string ActivityFileFor(string account) =>

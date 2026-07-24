@@ -4,6 +4,12 @@ using BadmintonClub.Models;
 namespace BadmintonClub.Services;
 
 /// <summary>
+/// Bilan d'une synchronisation Contacts. Après une lecture Google réussie, <see cref="GoogleCount"/>
+/// (contacts renvoyés par l'API) et <see cref="LocalCount"/> (adhérents locaux) doivent coïncider.
+/// </summary>
+public sealed record SyncReport(int GoogleCount, int LocalCount, int Added, int Removed, int Pushed, int MergedDuplicates);
+
+/// <summary>
 /// Conteneur des services et données partagés entre les différentes vues.
 /// Évite de réinstancier repositories/services dans chaque écran.
 /// </summary>
@@ -15,8 +21,13 @@ public class AppServices
     public GoogleContactsService Contacts { get; } = new();
     public GoogleSheetsService Sheets { get; } = new();
     public GoogleFormsService Forms { get; } = new();
+    /// <summary>Formulaires d'inscription hébergés par l'application web (source actuelle).</summary>
+    public WebFormsService WebForms { get; }
     public SheetRepository SheetRepository { get; private set; } = null!;
     public FormRepository FormRepository { get; private set; } = null!;
+
+    /// <summary>Décisions locales sur les réponses des formulaires (validés, statuts, différences ignorées).</summary>
+    public FormStateRepository FormStates { get; private set; } = null!;
 
     public AdherentRepository AdherentRepository { get; private set; } = null!;
     public ObservableCollection<Adherent> Adherents { get; } = new();
@@ -33,6 +44,7 @@ public class AppServices
     public AppServices()
     {
         Settings = SettingsService.Load();
+        WebForms = new WebFormsService(() => Settings);
         BrowserService.SelectedBrowserPath = Settings.BrowserPath;
 
         BindAccount(Settings.CurrentAccount);
@@ -61,6 +73,7 @@ public class AppServices
         AdherentRepository = new AdherentRepository(adherentsPath);
         SheetRepository = new SheetRepository(AppPaths.WorksheetsFileFor(CurrentAccount));
         FormRepository = new FormRepository(AppPaths.FormsFileFor(CurrentAccount));
+        FormStates = new FormStateRepository(AppPaths.FormStatesFileFor(CurrentAccount));
         ActivityRepository = new ActivityRepository(AppPaths.ActivityFileFor(CurrentAccount));
         _labelsCache = null;
         ReloadAdherents();
@@ -283,15 +296,46 @@ public class AppServices
     /// - contacts locaux non liés → rapprochés par e-mail, sinon poussés vers Google ;
     /// - contacts Google non présents localement → ajoutés.
     /// </summary>
-    public async Task SyncContactsAsync()
+    public async Task<SyncReport> SyncContactsAsync()
     {
+        // Dédoublonnage local préalable : au fil des ajouts/validations, plusieurs adhérents ont pu
+        // pointer sur le MÊME contact Google (même GoogleResourceName) — ce qui gonflait le total
+        // local par rapport à Google. On n'en garde qu'un par ressource, en fusionnant ses e-mails
+        // secondaires, et on retire les doublons.
+        var dupGroups = Adherents
+            .Where(a => !string.IsNullOrEmpty(a.GoogleResourceName))
+            .GroupBy(a => a.GoogleResourceName, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .ToList();
+        var merged = 0;
+        foreach (var grp in dupGroups)
+        {
+            var keep = grp.First();
+            foreach (var dup in grp.Skip(1))
+            {
+                keep.SecondaryEmails = keep.SecondaryEmails
+                    .Concat(dup.SecondaryEmails)
+                    .Where(m => !string.Equals(m, keep.Email, StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                Adherents.Remove(dup);
+                merged++;
+            }
+        }
+        if (merged > 0)
+            SaveAdherents();
+
+        // Lecture AUTORITAIRE de Google (People API, paginée). Si elle échoue, l'exception remonte
+        // et l'appelant décide (silencieux au démarrage, message si resynchro manuelle) : on ne
+        // laisse pas la liste locale dans un état à moitié réconcilié.
         var pulled = await Contacts.ListContactsAsync();
         var byResource = pulled
             .Where(c => !string.IsNullOrEmpty(c.ResourceName))
             .GroupBy(c => c.ResourceName)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var consumed = new HashSet<string>(StringComparer.Ordinal);
-        var changed = false;
+        var changed = merged > 0;
+        int removed = 0, pushed = 0, added = 0;
 
         // On travaille sur une copie car on peut retirer des éléments.
         foreach (var a in Adherents.ToList())
@@ -305,8 +349,9 @@ public class AppServices
                 }
                 else
                 {
-                    // Supprimé côté Google → on retire localement.
+                    // Lié à un contact Google absent de la lecture → supprimé côté Google : on retire.
                     Adherents.Remove(a);
+                    removed++;
                     changed = true;
                 }
             }
@@ -329,6 +374,7 @@ public class AppServices
                 {
                     // Contact purement local → on le pousse vers Google.
                     a.GoogleResourceName = await Contacts.AddContactAsync(a);
+                    pushed++;
                     changed = true;
                 }
             }
@@ -346,13 +392,19 @@ public class AppServices
                 Prenom = gc.Prenom,
                 Nom = gc.Nom,
                 Email = gc.Email,
-                Telephone = gc.Telephone
+                Telephone = gc.Telephone,
+                SecondaryEmails = gc.SecondaryEmails.ToList()
             });
+            added++;
             changed = true;
         }
 
         if (changed)
             SaveAdherents();
+
+        // Après une lecture réussie, la liste locale reflète exactement les contacts renvoyés par
+        // l'API (un adhérent par ressource) : GoogleCount et LocalCount doivent coïncider.
+        return new SyncReport(pulled.Count, Adherents.Count, added, removed, pushed, merged);
     }
 
     private static bool ApplyGoogleToLocal(Adherent a, GoogleContact gc)
@@ -362,6 +414,15 @@ public class AppServices
         if (!string.Equals(a.Nom, gc.Nom, StringComparison.Ordinal)) { a.Nom = gc.Nom; changed = true; }
         if (!string.Equals(a.Email, gc.Email, StringComparison.Ordinal)) { a.Email = gc.Email; changed = true; }
         if (!string.Equals(a.Telephone, gc.Telephone, StringComparison.Ordinal)) { a.Telephone = gc.Telephone; changed = true; }
+
+        // Google fait foi pour les e-mails secondaires : une suppression côté Google est répercutée
+        // en local (comparaison d'ensemble, insensible à la casse et à l'ordre).
+        var localSet = new HashSet<string>(a.SecondaryEmails, StringComparer.OrdinalIgnoreCase);
+        if (!localSet.SetEquals(gc.SecondaryEmails))
+        {
+            a.SecondaryEmails = gc.SecondaryEmails.ToList();
+            changed = true;
+        }
         return changed;
     }
 

@@ -12,6 +12,8 @@
             <!-- Barre d'outils : actions à droite -->
             <DockPanel Margin="0,12,0,0">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="🔄 Resynchroniser" Click="Resync_Click"
+                            ToolTip="Forcer une synchronisation complète avec Google et afficher le bilan" />
                     <Button Content="📥 Importer" Click="Importer_Click"
                             ToolTip="Importer des contacts (fichier Excel/CSV ou liste d'e-mails)" />
                     <Button Content="📊 Exporter CSV" Style="{StaticResource ExcelButton}"
@@ -118,8 +120,8 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Nom" Binding="{Binding Nom}" Width="*" SortDirection="Ascending" />
-                <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="*" />
+                <DataGridTextColumn Header="Nom" Binding="{Binding Nom}" Width="180" SortDirection="Ascending" />
+                <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="160" />
                 <DataGridTemplateColumn Header="Téléphone" Width="150" SortMemberPath="Telephone"
                                         ClipboardContentBinding="{Binding Telephone, Converter={StaticResource PhoneFormat}}">
                     <DataGridTemplateColumn.CellTemplate>
@@ -130,7 +132,7 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="E-mail" Width="2*" SortMemberPath="Email"
+                <DataGridTemplateColumn Header="E-mail" Width="*" MinWidth="220" SortMemberPath="Email"
                                         ClipboardContentBinding="{Binding Email}">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>

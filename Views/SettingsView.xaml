@@ -16,6 +16,17 @@
             <TextBlock Text="Choisissez le navigateur utilisé pour ouvrir les Google Sheets, Gmail et l'écran de connexion."
                        Foreground="#888888" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
 
+            <TextBlock Text="Formulaires d'inscription (application web)" Style="{StaticResource FormLabel}"
+                       Margin="0,24,0,0" />
+            <TextBox x:Name="WebUrlBox" Padding="6,4" />
+            <TextBlock Text="Adresse du site des formulaires. Laisser vide pour utiliser l'adresse par défaut."
+                       Foreground="#888888" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+
+            <TextBlock Text="Clé d'API d'intégration" Style="{StaticResource FormLabel}" Margin="0,14,0,0" />
+            <PasswordBox x:Name="WebKeyBox" Padding="6,4" />
+            <TextBlock Text="Clé secrète partagée avec le site (variable INTEGRATION_API_KEY). Nécessaire pour lire les formulaires et leurs réponses."
+                       Foreground="#888888" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+
             <TextBlock Text="La configuration des imports automatiques a été déplacée dans le menu « Synchro auto »."
                        Foreground="#888888" FontSize="11" Margin="0,20,0,0" TextWrapping="Wrap" />
         </StackPanel>

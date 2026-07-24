@@ -1,0 +1,34 @@
+<Window x:Class="BadmintonClub.Views.ValidateChangesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        SizeToContent="Height" Width="460" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Border Background="White" CornerRadius="12" Padding="24">
+        <Border.Effect>
+            <DropShadowEffect Color="#55000000" BlurRadius="24" ShadowDepth="4" />
+        </Border.Effect>
+        <StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Border Width="44" Height="44" CornerRadius="22" Background="#EAF2FB" VerticalAlignment="Top">
+                    <TextBlock Text="✎" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="Informations différentes" FontSize="17" FontWeight="Bold" Foreground="#233323"
+                           VerticalAlignment="Center" Margin="14,0,0,0" TextWrapping="Wrap" Width="340" />
+            </StackPanel>
+
+            <TextBlock x:Name="MessageText" TextWrapping="Wrap" Margin="0,14,0,0"
+                       Foreground="#555555" FontSize="13" LineHeight="20" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+                <Button Content="Annuler" IsCancel="True" Padding="14,8" Click="Cancel_Click" />
+                <Button Content="✖ Garder l'état actuel" Click="Ignore_Click" Padding="14,8"
+                        Background="#E0A32E" Foreground="White" BorderBrush="#B07E1E" FontWeight="SemiBold"
+                        ToolTip="Ne pas modifier les contacts ; valider tels quels" />
+                <Button Content="💾 Mettre à jour" Click="Update_Click" Padding="14,8" Margin="0" IsDefault="True"
+                        Background="#1565C0" Foreground="White" BorderBrush="#0D47A1" FontWeight="SemiBold"
+                        ToolTip="Appliquer aux contacts les informations des réponses" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

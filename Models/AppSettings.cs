@@ -31,4 +31,16 @@ public class AppSettings
 
     /// <summary>Adresse du compte Google actuellement connecté (données stockées par compte).</summary>
     public string CurrentAccount { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Adresse de l'application web des formulaires d'inscription (projet bad-web).
+    /// Vide = valeur par défaut (<see cref="Services.WebFormsService.DefaultBaseUrl"/>).
+    /// </summary>
+    public string WebFormsUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Clé de l'API d'intégration de l'application web (en-tête x-api-key).
+    /// SECRET : renseignée via config.json ou l'écran Paramètres, jamais versionnée.
+    /// </summary>
+    public string WebFormsApiKey { get; set; } = string.Empty;
 }

@@ -6,11 +6,26 @@
 
         <!-- ===== Sélecteur de formulaire ===== -->
         <DockPanel x:Name="PickerPanel">
-            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                <TextBlock Text="Préinscriptions" Style="{StaticResource PageTitle}" />
-                <TextBlock Text="Choisissez un formulaire pour consulter ses réponses."
-                           Foreground="#777777" FontSize="12" Margin="0,2,0,0" />
-            </StackPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="🔄 Actualiser" Click="Refresh_Click"
+                            ToolTip="Recharger la liste depuis l'application web" />
+                    <Button Content="🌐 Ouvrir l'application web" Style="{StaticResource PrimaryButton}"
+                            Click="OpenWebApp_Click" Margin="8,0,0,0"
+                            ToolTip="Créer et configurer les formulaires dans le navigateur" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="Formulaires d'inscription" Style="{StaticResource PageTitle}" />
+                    <TextBlock Text="Formulaires créés avec ce compte sur l'application web. Choisissez-en un pour consulter ses réponses."
+                               Foreground="#777777" FontSize="12" Margin="0,2,0,0" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <ctrl:SearchBox x:Name="FormSearchBox" Width="240" TextChanged="FormSearch_Changed"
+                                        PlaceholderText="Rechercher un formulaire (nom, libellé)…" />
+                        <TextBlock x:Name="FormCountText" VerticalAlignment="Center" Margin="14,0,0,0"
+                                   Foreground="#777777" FontSize="12" />
+                    </StackPanel>
+                </StackPanel>
+            </DockPanel>
 
             <Grid>
                 <DataGrid x:Name="FormsGrid" AutoGenerateColumns="False" IsReadOnly="True"
@@ -35,7 +50,7 @@
                 <TextBlock x:Name="PickerEmpty" Visibility="Collapsed" IsHitTestVisible="False"
                            HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
                            Foreground="#999999" FontSize="13"
-                           Text="Aucun formulaire. Créez-en un depuis la page Google Forms." />
+                           Text="Aucun formulaire pour ce compte. Créez-en un depuis l'application web." />
             </Grid>
         </DockPanel>
 
@@ -54,10 +69,12 @@
                 <!-- Barre : filtre (comme Contacts) + liste d'attente + valider -->
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="✅ Inscrits" Click="RegisteredPeople_Click"
+                                ToolTip="Voir les personnes déjà inscrites pour ce formulaire" />
+                        <Button Content="⬇ Exporter CSV" Click="Export_Click"
+                                ToolTip="Exporter les lignes affichées (filtre pris en compte)" />
                         <Button x:Name="WaitlistBtn" Content="⏳ Liste d'attente" Click="Waitlist_Click"
-                                ToolTip="Voir la liste d'attente (par ordre de date de réponse)" />
-                        <Button x:Name="ValidateBtn" Content="✔ Valider" Style="{StaticResource PrimaryButton}"
-                                Click="Validate_Click" Margin="0" />
+                                ToolTip="Voir la liste d'attente (par ordre de date de réponse)" Margin="0" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ctrl:SearchBox x:Name="SearchBox" Width="240" TextChanged="Search_Changed"
@@ -66,6 +83,31 @@
                                    Foreground="#777777" FontSize="12" />
                     </StackPanel>
                 </DockPanel>
+
+                <!-- Barre d'actions groupées : visible dès qu'une ligne est cochée.
+                     Les actions proposées dépendent du mode (préinscrits / liste d'attente). -->
+                <Border x:Name="SelectionBar" Visibility="Collapsed" Margin="0,10,0,0"
+                        Background="#EAF3EA" BorderBrush="#C8DFC8" BorderThickness="1"
+                        CornerRadius="6" Padding="12,8">
+                    <DockPanel>
+                        <TextBlock x:Name="SelectionText" VerticalAlignment="Center"
+                                   Foreground="#233323" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="ValidateBtn" Content="✔ Valider"
+                                    Style="{StaticResource PrimaryButton}" Click="Validate_Click"
+                                    ToolTip="Créer/associer les adhérents au libellé du formulaire" />
+                            <Button x:Name="ToWaitlistBtn" Content="⏳ Mettre en liste d'attente"
+                                    Click="BulkStatus_Click"
+                                    ToolTip="Placer les personnes cochées en liste d'attente" />
+                            <Button x:Name="ToPreBtn" Content="↩ Remettre en préinscription"
+                                    Visibility="Collapsed" Click="BulkStatus_Click"
+                                    ToolTip="Sortir les personnes cochées de la liste d'attente" />
+                            <Button x:Name="DeleteBtn" Content="🗑 Supprimer" Click="BulkDelete_Click"
+                                    Margin="0" Background="#FDECEA" BorderBrush="#E6A9A0" Foreground="#B71C1C"
+                                    ToolTip="Supprimer les préinscriptions du site (les personnes pourront se réinscrire)" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
             </StackPanel>
 
             <Grid>
@@ -82,6 +124,11 @@
                                 <!-- Répondant absent de mes contacts → rouge -->
                                 <DataTrigger Binding="{Binding NotInContacts}" Value="True">
                                     <Setter Property="Background" Value="#FCE4E4" />
+                                </DataTrigger>
+                                <!-- Incohérent : membre du libellé mais absent de mes contacts → jaune
+                                     (placé après le rouge pour l'emporter). -->
+                                <DataTrigger Binding="{Binding MemberNotInContacts}" Value="True">
+                                    <Setter Property="Background" Value="#FFF6D6" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -100,17 +147,73 @@
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
                         <DataGridTextColumn x:Name="RangCol" Header="Rang" Binding="{Binding RangText}" Width="55" />
-                        <DataGridTextColumn Header="Nom" Binding="{Binding Nom}" Width="1.1*" />
-                        <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="1.1*" />
-                        <DataGridTextColumn Header="Téléphone" Binding="{Binding Telephone}" Width="1.2*" />
-                        <DataGridTemplateColumn Header="E-mail" Width="1.9*" SortMemberPath="Email"
-                                                ClipboardContentBinding="{Binding Email}">
+                        <!-- Les colonnes affichent les infos DU CONTACT (repli sur la réponse si absent).
+                             Une cellule jaune = la réponse contredit le contact (info-bulle : valeur de la réponse). -->
+                        <DataGridTemplateColumn Header="Nom" Width="150" SortMemberPath="Nom"
+                                                ClipboardContentBinding="{Binding Nom}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Nom}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="(pas dans mes contacts)" FontStyle="Italic" FontSize="11"
+                                                   Foreground="#B71C1C" TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding NotInContacts, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                            <DataGridTemplateColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="ToolTip" Value="{Binding NomTip}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding NomDiff}" Value="True">
+                                            <Setter Property="Background" Value="#FFE08A" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTemplateColumn.CellStyle>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="130">
+                            <DataGridTextColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="ToolTip" Value="{Binding PrenomTip}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding PrenomDiff}" Value="True">
+                                            <Setter Property="Background" Value="#FFE08A" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Téléphone" Binding="{Binding Telephone}" Width="150">
+                            <DataGridTextColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="ToolTip" Value="{Binding TelTip}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding TelDiff}" Value="True">
+                                            <Setter Property="Background" Value="#FFE08A" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
+                        <DataGridTemplateColumn Header="E-mail" Width="*" MinWidth="200" SortMemberPath="EmailText"
+                                                ClipboardContentBinding="{Binding EmailText}">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               Text="{Binding Email}" Foreground="{Binding EmailBrush}" />
+                                               Text="{Binding EmailText}" Foreground="{Binding EmailBrush}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
+                            <DataGridTemplateColumn.CellStyle>
+                                <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                    <Setter Property="ToolTip" Value="{Binding EmailTip}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding EmailDiff}" Value="True">
+                                            <Setter Property="Background" Value="#FFE08A" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTemplateColumn.CellStyle>
                         </DataGridTemplateColumn>
                         <DataGridTemplateColumn Header="Mails secondaires" Width="130" CanUserResize="False">
                             <DataGridTemplateColumn.CellTemplate>
@@ -129,7 +232,8 @@
                         <DataGridTextColumn Header="Répondu le"
                                             Binding="{Binding SubmittedAt, StringFormat=\{0:dd/MM/yyyy HH:mm\}}" Width="Auto" />
                         <DataGridTextColumn Header="Modifié le" Binding="{Binding ModifiedText}" Width="Auto" />
-                        <DataGridTextColumn Header="Statut" Binding="{Binding Status}" Width="Auto" />
+                        <!-- « * » = statut forcé à la main (⏳ / ↩) et non déduit des réponses. -->
+                        <DataGridTextColumn Header="Statut" Binding="{Binding StatusText}" Width="Auto" />
                         <DataGridTemplateColumn Header="Alerte" Width="90" CanUserResize="False">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -148,11 +252,22 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                        <Button Style="{StaticResource RowModifyButton}" Content="➕ Contacts"
-                                                ToolTip="Ajouter ce répondant à mes contacts" Click="AddToContacts_Click"
-                                                Visibility="{Binding NotInContacts, Converter={StaticResource BoolToVisibility}}" />
                                         <Button Style="{StaticResource RowButton}" Content="👁"
                                                 ToolTip="Voir les réponses de cette personne" Click="Detail_Click" />
+                                        <Button Style="{StaticResource RowDeleteButton}" Content="🗑"
+                                                ToolTip="Supprimer la préinscription de cette personne"
+                                                Click="DeleteRow_Click" />
+                                        <Button Style="{StaticResource RowButton}" Content="⏳"
+                                                ToolTip="Mettre cette personne en liste d'attente"
+                                                Click="SetStatus_Click"
+                                                Visibility="{Binding IsWaiting, Converter={StaticResource InverseBoolToVisibility}}" />
+                                        <Button Style="{StaticResource RowButton}" Content="↩"
+                                                ToolTip="Remettre cette personne en préinscription"
+                                                Click="SetStatus_Click"
+                                                Visibility="{Binding IsWaiting, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button Style="{StaticResource RowModifyButton}" Content="➕👤"
+                                                ToolTip="Ajouter ce répondant à mes contacts" Click="AddToContacts_Click"
+                                                Visibility="{Binding NotInContacts, Converter={StaticResource BoolToVisibility}}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -162,6 +277,90 @@
                 <TextBlock x:Name="EmptyResults" Visibility="Collapsed" IsHitTestVisible="False"
                            HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
                            Foreground="#999999" FontSize="13" />
+            </Grid>
+        </DockPanel>
+
+        <!-- ===== Personnes inscrites (page inline) ===== -->
+        <DockPanel x:Name="RegisteredPanel" Visibility="Collapsed">
+
+            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="← Formulaires" Click="Back_Click"
+                            ToolTip="Revenir à la liste des formulaires" VerticalAlignment="Center" />
+                    <TextBlock x:Name="RegisteredTitle" Style="{StaticResource PageTitle}"
+                               VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="👥 Préinscrits" Click="ToPreinscrits_Click"
+                                ToolTip="Voir les préinscrits du formulaire" />
+                        <Button Content="⏳ Liste d'attente" Click="RegisteredWaitlist_Click"
+                                ToolTip="Voir la liste d'attente du formulaire" />
+                        <Button Content="⬇ Exporter CSV" Click="ExportRegistered_Click"
+                                ToolTip="Exporter les inscrits affichés" Margin="0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ctrl:SearchBox x:Name="RegisteredSearchBox" Width="240" TextChanged="RegisteredSearch_Changed"
+                                        PlaceholderText="Rechercher (nom, prénom, tél, e-mail)…" />
+                        <TextBlock x:Name="RegisteredCountText" VerticalAlignment="Center" Margin="14,0,0,0"
+                                   Foreground="#777777" FontSize="12" />
+                    </StackPanel>
+                </DockPanel>
+            </StackPanel>
+
+            <Grid>
+                <!-- Le contact est affiché « tel quel » (mêmes colonnes que la page Contacts). -->
+                <DataGrid x:Name="RegisteredGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" HeadersVisibility="Column" SelectionUnit="Cell"
+                          SelectionMode="Extended" ClipboardCopyMode="ExcludeHeader">
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Nom" Width="150" SortMemberPath="Nom"
+                                                ClipboardContentBinding="{Binding Nom}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Nom}" TextTrimming="CharacterEllipsis" />
+                                        <!-- Le contact a été supprimé depuis : valeurs figées à la validation. -->
+                                        <TextBlock Text="(plus dans mes contacts)" FontStyle="Italic" FontSize="11"
+                                                   Foreground="#B71C1C" TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding NotInContacts, Converter={StaticResource BoolToVisibility}}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Prénom" Binding="{Binding Prenom}" Width="130" />
+                        <DataGridTextColumn Header="Téléphone" Binding="{Binding Telephone}" Width="150" />
+                        <DataGridTextColumn Header="E-mail" Binding="{Binding Email}" Width="*" MinWidth="200" />
+                        <DataGridTemplateColumn Header="Mails secondaires" Width="130" CanUserResize="False">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Grid HorizontalAlignment="Center">
+                                        <TextBlock Text="N/A" Foreground="#9AA0A6" VerticalAlignment="Center"
+                                                   Visibility="{Binding HasSecondaryEmails, Converter={StaticResource InverseBoolToVisibility}}" />
+                                        <Button Style="{StaticResource RowBlueButton}"
+                                                Content="{Binding SecondaryEmailsBadge}"
+                                                ToolTip="Voir les e-mails secondaires" Click="RegisteredSecondaryEmails_Click"
+                                                Visibility="{Binding HasSecondaryEmails, Converter={StaticResource BoolToVisibility}}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Ajouté le" Binding="{Binding AddedText}" Width="Auto" />
+                        <DataGridTemplateColumn Header="Action" Width="220" CanUserResize="False">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource RowBlueButton}" Content="↩ Remettre en préinscription"
+                                            ToolTip="Remettre cette personne dans la liste des préinscrits"
+                                            Click="RegisteredRestore_Click" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <TextBlock x:Name="RegisteredEmpty" Visibility="Collapsed" IsHitTestVisible="False"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                           Foreground="#999999" FontSize="13"
+                           Text="Aucune personne inscrite pour ce formulaire." />
             </Grid>
         </DockPanel>
     </Grid>

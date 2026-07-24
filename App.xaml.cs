@@ -43,6 +43,37 @@ public partial class App : Application
         e.SetObserved(); // évite que l'app soit tuée par une tâche non observée
     }
 
+    /// <summary>
+    /// Active le défilement tactile (panning) horizontal ET vertical sur le ScrollViewer interne du
+    /// tableau : sans ça, un glissement au doigt de droite à gauche ne fait rien. Câblé par un
+    /// EventSetter du style DataGrid (App.xaml).
+    /// </summary>
+    private void DataGrid_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.DataGrid grid)
+            return;
+
+        var scroll = FindVisualChild<System.Windows.Controls.ScrollViewer>(grid);
+        if (scroll != null)
+            scroll.PanningMode = System.Windows.Controls.PanningMode.Both;
+    }
+
+    /// <summary>Premier descendant visuel du type demandé (parcours en profondeur).</summary>
+    private static T? FindVisualChild<T>(DependencyObject root) where T : DependencyObject
+    {
+        var count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T typed)
+                return typed;
+            var found = FindVisualChild<T>(child);
+            if (found != null)
+                return found;
+        }
+        return null;
+    }
+
     /// <summary>Efface la sélection de cellule quand le focus quitte le tableau (clic à l'extérieur).</summary>
     private void DataGrid_LostKeyboardFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
     {

@@ -14,7 +14,8 @@ public class ContactLabelState
 }
 
 /// <summary>Un contact Google (pour l'import/synchro avec la liste locale).</summary>
-public sealed record GoogleContact(string ResourceName, string Prenom, string Nom, string Email, string Telephone);
+public sealed record GoogleContact(string ResourceName, string Prenom, string Nom, string Email,
+    string Telephone, IReadOnlyList<string> SecondaryEmails);
 
 /// <summary>
 /// Intégration Google Contacts (People API).
@@ -368,15 +369,25 @@ public class GoogleContactsService
                         var name = p.Names?.FirstOrDefault();
                         var prenom = name?.GivenName ?? string.Empty;
                         var nom = name?.FamilyName ?? string.Empty;
-                        var email = p.EmailAddresses?.FirstOrDefault()?.Value ?? string.Empty;
                         var tel = p.PhoneNumbers?.FirstOrDefault()?.Value ?? string.Empty;
+
+                        // Tous les e-mails : le 1er est le principal, les suivants les secondaires
+                        // (dédupliqués, dans l'ordre renvoyé par Google).
+                        var allEmails = (p.EmailAddresses ?? new List<EmailAddress>())
+                            .Select(a => a.Value?.Trim())
+                            .Where(v => !string.IsNullOrWhiteSpace(v))
+                            .Select(v => v!)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        var email = allEmails.FirstOrDefault() ?? string.Empty;
+                        var secondary = allEmails.Skip(1).ToList();
 
                         // On ignore les entrées totalement vides.
                         if (string.IsNullOrWhiteSpace(prenom) && string.IsNullOrWhiteSpace(nom) &&
                             string.IsNullOrWhiteSpace(email))
                             continue;
 
-                        result.Add(new GoogleContact(p.ResourceName, prenom, nom, email, tel));
+                        result.Add(new GoogleContact(p.ResourceName, prenom, nom, email, tel, secondary));
                     }
                 }
 

@@ -90,6 +90,48 @@ public partial class ContactsView : UserControl, IActivableView
         }
     }
 
+    /// <summary>
+    /// Resynchronisation manuelle : force une réconciliation complète avec Google et affiche un
+    /// bilan chiffré. Contrairement à la synchro de démarrage, les erreurs sont remontées à l'écran.
+    /// </summary>
+    private async void Resync_Click(object sender, RoutedEventArgs e)
+    {
+        var owner = Window.GetWindow(this)!;
+        SyncReport? report = null;
+        var result = await ProgressRunner.RunBusyAsync(owner, "Synchronisation avec Google…",
+            async () => { report = await _services.SyncContactsAsync(); });
+
+        if (result.Failed > 0 || report == null)
+        {
+            MessageBox.Show(owner,
+                "La synchronisation a échoué :\n" + (result.LastError ?? "erreur inconnue") +
+                "\n\nLa liste locale n'a pas été entièrement réconciliée.",
+                "Resynchroniser", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        RefreshView();
+
+        var r = report;
+        var lines = new List<string>
+        {
+            $"Contacts Google : {r.GoogleCount}",
+            $"Contacts locaux : {r.LocalCount}",
+        };
+        if (r.GoogleCount != r.LocalCount)
+            lines.Add("\n⚠ Écart local/Google inattendu après synchronisation.");
+        var changes = new List<string>();
+        if (r.Added > 0) changes.Add($"{r.Added} ajouté(s) depuis Google");
+        if (r.Removed > 0) changes.Add($"{r.Removed} retiré(s) (supprimés côté Google)");
+        if (r.Pushed > 0) changes.Add($"{r.Pushed} poussé(s) vers Google");
+        if (r.MergedDuplicates > 0) changes.Add($"{r.MergedDuplicates} doublon(s) local(aux) fusionné(s)");
+        lines.Add(changes.Count > 0 ? "\n" + string.Join("\n", changes.Select(c => "• " + c)) : "\nDéjà à jour.");
+
+        MessageBox.Show(owner, string.Join("\n", lines), "Synchronisation terminée",
+            MessageBoxButton.OK,
+            r.GoogleCount != r.LocalCount ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
     // ---- Filtrage / pagination -------------------------------------------
 
     /// <summary>Un adhérent passe-t-il le filtre (recherche + libellé + complétude) ?</summary>
@@ -304,10 +346,10 @@ public partial class ContactsView : UserControl, IActivableView
         if ((sender as FrameworkElement)?.DataContext is not Adherent a || !a.HasSecondaryEmails)
             return;
 
-        var list = string.Join("\n", a.SecondaryEmails.Select(m => "• " + m));
-        MessageBox.Show(Window.GetWindow(this), list,
-            $"E-mails secondaires — {a.Prenom} {a.Nom}".Trim(),
-            MessageBoxButton.OK, MessageBoxImage.Information);
+        new EmailListWindow($"{a.Prenom} {a.Nom}".Trim(), a.SecondaryEmails)
+        {
+            Owner = Window.GetWindow(this)
+        }.ShowDialog();
     }
 
     // ---- Recherche avancée : filtre par libellé --------------------------

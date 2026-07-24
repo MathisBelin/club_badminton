@@ -47,17 +47,14 @@
                         <RadioButton x:Name="NavSheets" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="sheets" Content="📄   Google Sheets"
                                      Checked="Nav_Checked" />
-                        <RadioButton x:Name="NavFormulaires" Style="{StaticResource NavButton}"
-                                     GroupName="Nav" Tag="formulaires" Content="🧾   Formulaires"
-                                     Checked="Nav_Checked" />
-                        <!-- Google Forms : MIS EN VEILLE (remplacé par l'application web « Formulaires »).
+                        <!-- Google Forms : MIS EN VEILLE (remplacé par les formulaires de l'application web).
                              Pour le réactiver : retirer Visibility="Collapsed" ci-dessous. -->
                         <RadioButton x:Name="NavForms" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="forms" Content="📋   Google Forms"
                                      Visibility="Collapsed"
                                      Checked="Nav_Checked" />
                         <RadioButton x:Name="NavPreinscription" Style="{StaticResource NavButton}"
-                                     GroupName="Nav" Tag="preinscription" Content="📝   Préinscriptions"
+                                     GroupName="Nav" Tag="preinscription" Content="🧾   Formulaires d'inscription"
                                      Checked="Nav_Checked" />
                         <RadioButton x:Name="NavHistory" Style="{StaticResource NavButton}"
                                      GroupName="Nav" Tag="history" Content="🕓   Historique"

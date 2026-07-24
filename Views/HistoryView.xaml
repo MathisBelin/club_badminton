@@ -42,6 +42,15 @@
             </StackPanel>
         </StackPanel>
 
+        <Border DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="PrevBtn" Content="◀ Précédent" Click="Prev_Click" />
+                <TextBlock x:Name="PageText" VerticalAlignment="Center" Margin="14,0"
+                           Foreground="#555555" FontSize="12" />
+                <Button x:Name="NextBtn" Content="Suivant ▶" Click="Next_Click" Margin="0" />
+            </StackPanel>
+        </Border>
+
         <Grid>
             <DataGrid x:Name="Grid" AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Extended"
@@ -57,7 +66,7 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Header="Cible" Width="*" SortMemberPath="Target">
+                    <DataGridTemplateColumn Header="Cible" Width="200" SortMemberPath="Target">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -70,9 +79,9 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Détails" Binding="{Binding Details}" Width="*" />
-                    <DataGridTextColumn Header="Ancienne valeur" Binding="{Binding OldValue}" Width="1.4*" />
-                    <DataGridTextColumn Header="Nouvelle valeur" Binding="{Binding NewValue}" Width="1.4*" />
+                    <DataGridTextColumn Header="Détails" Binding="{Binding Details}" Width="180" />
+                    <DataGridTextColumn Header="Ancienne valeur" Binding="{Binding OldValue}" Width="200" />
+                    <DataGridTextColumn Header="Nouvelle valeur" Binding="{Binding NewValue}" Width="*" MinWidth="200" />
                 </DataGrid.Columns>
             </DataGrid>
             <TextBlock x:Name="EmptyResults" Visibility="Collapsed" IsHitTestVisible="False"

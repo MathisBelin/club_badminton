@@ -16,7 +16,7 @@
                 <ctrl:MultiSelectComboBox x:Name="LabelSelect" Width="200" VerticalAlignment="Center" />
                 <Button x:Name="AdvancedToggle" Content="🔎 Recherche avancée" Click="AdvancedToggle_Click"
                         Margin="10,0,10,0" ToolTip="Filtres avancés par libellés (ET / exclusion)" />
-                <Button x:Name="PreinscriptionsBtn" Content="📝 Préinscriptions" Click="Preinscriptions_Click"
+                <Button x:Name="PreinscriptionsBtn" Content="🧾 Formulaires d'inscription" Click="Preinscriptions_Click"
                         Margin="0,0,16,0"
                         ToolTip="Voir les préinscriptions et la liste d'attente" />
                 <ctrl:SearchBox x:Name="SearchBox" Width="200" TextChanged="SearchBox_TextChanged" />

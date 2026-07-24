@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ctrl="clr-namespace:BadmintonClub.Controls"
         Title="Adhérent"
-        Height="400" Width="400"
+        SizeToContent="Height" Width="400"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False">
@@ -14,18 +14,18 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="Prénom *" Style="{StaticResource FormLabel}" />
-            <TextBox x:Name="PrenomBox" />
+            <TextBlock Text="Nom *" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="NomBox" />
         </StackPanel>
 
         <StackPanel Grid.Row="1" Margin="0,0,0,10">
-            <TextBlock Text="Nom *" Style="{StaticResource FormLabel}" />
-            <TextBox x:Name="NomBox" />
+            <TextBlock Text="Prénom *" Style="{StaticResource FormLabel}" />
+            <TextBox x:Name="PrenomBox" />
         </StackPanel>
 
         <StackPanel Grid.Row="2" Margin="0,0,0,10">
@@ -38,12 +38,39 @@
             <TextBox x:Name="EmailBox" />
         </StackPanel>
 
-        <StackPanel Grid.Row="4" x:Name="LabelsSection" Margin="0,0,0,10" Visibility="Collapsed">
+        <StackPanel Grid.Row="4" Margin="0,0,0,10">
+            <TextBlock Text="Mails secondaires" Style="{StaticResource FormLabel}" />
+            <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="SecondaryEmailsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" TextChanged="SecondaryEmail_TextChanged"
+                                         Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Content="✕" Click="RemoveEmail_Click"
+                                        Margin="6,0,0,0" MinWidth="0" Padding="9,4"
+                                        Background="#FDECEA" BorderBrush="#E6A9A0" Foreground="#B71C1C"
+                                        ToolTip="Retirer cette adresse" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <Button x:Name="AddEmailBtn" Content="＋ Ajouter une adresse" Click="AddEmail_Click"
+                    HorizontalAlignment="Left" Margin="0,2,0,0" Padding="10,4" FontSize="12"
+                    ToolTip="Renseignez d'abord correctement les adresses en cours" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="5" x:Name="LabelsSection" Margin="0,0,0,10" Visibility="Collapsed">
             <TextBlock Text="Associer à des libellés (optionnel)" Style="{StaticResource FormLabel}" />
             <ctrl:MultiSelectComboBox x:Name="LabelsSelect" />
         </StackPanel>
 
-        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
             <Button Content="Annuler" IsCancel="True" Click="Annuler_Click" />
             <Button Content="Enregistrer" Style="{StaticResource PrimaryButton}"
                     IsDefault="True" Click="Enregistrer_Click" Margin="0" />

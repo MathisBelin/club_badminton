@@ -15,6 +15,12 @@ public partial class ResponseDetailWindow : Window
     /// <summary>Vrai si le contact a été mis à jour depuis cette fenêtre (pour rafraîchir l'appelant).</summary>
     public bool ContactUpdated { get; private set; }
 
+    /// <summary>
+    /// Différences que j'ai choisi d'ignorer : champ contact → <b>valeur actuelle du contact</b>.
+    /// L'appelant réécrit ces valeurs dans la réponse de la personne sur le site.
+    /// </summary>
+    public List<(string Field, string ContactValue)> IgnoredFields { get; } = new();
+
     public ResponseDetailWindow(
         List<GoogleFormsService.FormQuestionInfo> questions, FormResponseRow response, string personName,
         Adherent? existing = null, IReadOnlyDictionary<string, string>? qidToField = null, AppServices? services = null)
@@ -41,16 +47,51 @@ public partial class ResponseDetailWindow : Window
             {
                 var (current, newValue, differs) = Compare(field, raw, existing);
                 if (differs)
-                    return new QAItem(q.Title, answer, true, field, newValue,
+                    return new QAItem(q.Title, answer, true, field, newValue, current,
                         $"Actuel : {(string.IsNullOrWhiteSpace(current) ? "(vide)" : current)}");
             }
-            return new QAItem(q.Title, answer, false, null, null, string.Empty);
+            return new QAItem(q.Title, answer, false, null, null, string.Empty, string.Empty);
         }).ToList();
 
         List.ItemsSource = _items;
 
-        UpdateBtn.Visibility = existing != null && services != null && _items.Any(i => i.IsDifferent)
+        RefreshButtons();
+    }
+
+    /// <summary>Les boutons globaux ne servent que s'il reste au moins une différence.</summary>
+    private void RefreshButtons()
+    {
+        var visible = _existing != null && _services != null && _items.Any(i => i.IsDifferent)
             ? Visibility.Visible : Visibility.Collapsed;
+        UpdateBtn.Visibility = visible;
+        IgnoreAllBtn.Visibility = visible;
+    }
+
+    /// <summary>Ignore une différence : le contact garde sa valeur actuelle.</summary>
+    private void IgnoreField_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe || fe.DataContext is not QAItem item)
+            return;
+        Ignore(item);
+        RefreshButtons();
+    }
+
+    /// <summary>Ignore toutes les différences d'un coup (« garder l'état actuel »).</summary>
+    private void IgnoreAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in _items.Where(i => i.IsDifferent).ToList())
+            Ignore(item);
+        RefreshButtons();
+    }
+
+    private void Ignore(QAItem item)
+    {
+        if (!item.IsDifferent || item.Field == null)
+            return;
+        IgnoredFields.Add((item.Field, item.CurrentValue));
+        // La réponse va être remplacée par la valeur du contact : on l'affiche tout de suite.
+        item.Answer = string.IsNullOrWhiteSpace(item.CurrentValue) ? "(sans réponse)" : item.CurrentValue;
+        item.IsDifferent = false;
     }
 
     /// <summary>Compare la réponse au champ correspondant du contact. Renvoie (valeur actuelle, nouvelle valeur, diffère).</summary>
@@ -95,7 +136,7 @@ public partial class ResponseDetailWindow : Window
             return;
 
         if (await ApplyDiffsAsync(new[] { item }))
-            UpdateBtn.Visibility = _items.Any(i => i.IsDifferent) ? Visibility.Visible : Visibility.Collapsed;
+            RefreshButtons();
     }
 
     /// <summary>Applique au contact les champs indiqués et pousse la modif vers Google. Renvoie vrai si réussi.</summary>
@@ -118,7 +159,11 @@ public partial class ResponseDetailWindow : Window
 
         var result = await ProgressRunner.RunBusyAsync(this, "Mise à jour du contact…", async () =>
         {
-            _existing.GoogleResourceName = await _services.Contacts.EnsureContactResourceAsync(_existing);
+            // Contact déjà lié → on met à jour SA ressource (l'e-mail a pu changer : ne PAS rechercher
+            // par e-mail, sinon EnsureContactResourceAsync ne le retrouve pas et crée un doublon).
+            // Seul un contact non encore lié est recherché/créé.
+            if (string.IsNullOrEmpty(_existing.GoogleResourceName))
+                _existing.GoogleResourceName = await _services.Contacts.EnsureContactResourceAsync(_existing);
             await _services.Contacts.UpdateContactAsync(_existing.GoogleResourceName, _existing);
         });
 
@@ -147,9 +192,26 @@ public partial class ResponseDetailWindow : Window
     private sealed class QAItem : INotifyPropertyChanged
     {
         public string Question { get; }
-        public string Answer { get; }
+
+        private string _answer;
+        /// <summary>Valeur affichée : la réponse saisie, ou la valeur conservée après « ignorer ».</summary>
+        public string Answer
+        {
+            get => _answer;
+            set { if (_answer != value) { _answer = value; OnPropertyChanged(nameof(Answer)); } }
+        }
+
         public string? Field { get; }
+
+        /// <summary>Valeur de la réponse, prête à être écrite dans le contact.</summary>
         public string? NewValue { get; }
+
+        /// <summary>Valeur actuelle du contact, écrite dans la réponse si j'ignore la différence.</summary>
+        public string CurrentValue { get; }
+
+        /// <summary>Valeur actuelle affichée dans l'encadré ambre (« (vide) » si le contact n'a rien).</summary>
+        public string CurrentDisplay => string.IsNullOrWhiteSpace(CurrentValue) ? "(vide)" : CurrentValue;
+
         public string CurrentText { get; }
 
         private bool _isDifferent;
@@ -159,13 +221,15 @@ public partial class ResponseDetailWindow : Window
             set { if (_isDifferent != value) { _isDifferent = value; OnPropertyChanged(nameof(IsDifferent)); } }
         }
 
-        public QAItem(string question, string answer, bool isDifferent, string? field, string? newValue, string currentText)
+        public QAItem(string question, string answer, bool isDifferent, string? field, string? newValue,
+            string currentValue, string currentText)
         {
             Question = question;
-            Answer = answer;
+            _answer = answer;
             _isDifferent = isDifferent;
             Field = field;
             NewValue = newValue;
+            CurrentValue = currentValue;
             CurrentText = currentText;
         }
 

@@ -14,9 +14,11 @@ badminton, synchronisée avec **Google Contacts**, **Google Sheets** et **Gmail*
   compte Google (écran de connexion au démarrage).
 - **Données par compte** : chaque compte Google a son propre jeu de données local, isolé.
 - **Synchronisation deux sens** avec Google Contacts (création / modification / suppression).
-- **Formulaires Google & réponses** : gestion des Google Forms (créer, configurer, associer un
-  libellé, paramétrer les réponses) et **visualisation des répondants** d'un formulaire sous forme
-  de contacts, avec **liste d'attente** (par date de réponse) et **validation** en adhérents.
+- **Formulaires d'inscription & réponses** : les formulaires sont créés et configurés dans
+  l'**application web** (projet `bad-web`) ; le desktop les **lit** via son API d'intégration et
+  affiche les répondants **sous forme de contacts**, avec **liste d'attente** (par date de réponse),
+  comparaison avec les contacts existants et **validation** en adhérents (§11).
+  L'ancienne page **Google Forms** est conservée mais **en veille** (§10bis).
 - **Historique des activités** : journal local par compte (ajouts, modifs, suppressions,
   associations, dissociations).
 - **Hors ligne** : l'application reste utilisable ; seules les actions Google nécessitent Internet.
@@ -56,6 +58,8 @@ Services/                  Logique métier et accès Google
   GoogleAuth.cs            OAuth2 (récepteur loopback, scopes unifiés, vérif des scopes du jeton, déconnexion)
   GoogleContactsService.cs People API : contacts, libellés, membres, appartenances (dont SetContactMembershipsAsync)
   GoogleSheetsService.cs   Sheets/Drive : création, partage, export CSV/XLSX, renommage, lecture de plage, existence
+  WebFormsService.cs       Formulaires d'inscription de l'APPLICATION WEB (API d'intégration, x-api-key) :
+                           liste par compte, questions (+ FieldMap/AnswerRules déduits), réponses — voir §11
   GoogleFormsService.cs    Forms API + Drive : lister, créer (vierge / depuis modèle local via CreateItem),
                            activer la collecte e-mail vérifié à la création, exporter la structure (modèle),
                            renommer, supprimer, lire questions (type/options) et réponses (e-mail vérifié)
@@ -95,8 +99,11 @@ Views/                     Écrans (UserControl) et fenêtres (Window)
   FormConfigWindow         Configuration d'un Form : renommer, libellé, correspondances champ↔question,
                            règles de réponses (choix unique), ⭐ enregistrer comme modèle
   FormSettingsReminderWindow Rappel illustré (capture réelle) des réglages Forms à activer à la main
-  ResponseDetailWindow     Modale : réponses d'un répondant (surlignage jaune des diffs + maj du contact)
-  PreinscriptionView       Page Préinscriptions : sélecteur de formulaire → réponses (contacts) + alertes + validation
+  ResponseDetailWindow     Modale : réponses d'un répondant (diffs en couleur bleu/ambre + maj du contact)
+  AlertWindow              Fenêtre d'alerte stylée d'un répondant (liste + « 👁 Voir les changements »)
+  EmailListWindow          Fenêtre stylée : liste des e-mails secondaires d'une personne (lecture seule)
+  ValidateChangesWindow    Choix groupé maj/ignorer des infos différentes à la validation
+  PreinscriptionView       Page Préinscriptions : sélecteur de formulaire → réponses (contacts) + alertes + validation + page Inscrits
   … + fenêtres partagées : PickLabelsWindow (select2 multi générique), LabelListWindow (puces libellés),
     ContactDetailsWindow (détails figés d'un contact), ConfirmWindow (confirmations stylées),
     InputDialog (saisie simple)
@@ -105,17 +112,17 @@ Views/                     Écrans (UserControl) et fenêtres (Window)
 ### 2.3 Navigation
 `MainWindow` héberge un menu latéral (RadioButtons) et un `ContentControl`. Les pages sont des
 `UserControl` instanciés une fois puis affichés par échange de contenu avec animation.
-Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Formulaires, Préinscriptions, Historique, Paramètres**.
+Pages : **Contacts, Libellés, Association, E-mail, Google Sheets, Formulaires d'inscription, Historique, Paramètres**.
 
-> **Formulaires** (`FormulairesView`) est le point d'accès à l'**application web** des formulaires
-> d'inscription (projet `bad-web`) : elle affiche l'adresse du site et l'ouvre dans le navigateur
-> (`BrowserService.Open`). La page **Google Forms** (`FormsView`, §10bis) est **mise en veille** :
-> son entrée de menu `NavForms` est `Visibility="Collapsed"` dans `MainWindow.xaml`. Le code et la vue
-> restent en place (la synchro Drive au démarrage continue, car **Préinscriptions** s'appuie sur le
-> registre des formulaires) ; pour la réactiver, retirer `Visibility="Collapsed"`.
-La page **Préinscriptions** (`PreinscriptionView`, §11) s'ouvre sur un **sélecteur de formulaire** (tableau)
-puis affiche les **réponses** du formulaire choisi ; on peut aussi y arriver directement depuis la page
-**Google Forms** (bouton **👥** ou double-clic).
+> La page **Formulaires d'inscription** (`PreinscriptionView`, §11 — ex-« Préinscriptions ») est le
+> point d'entrée unique : elle liste les formulaires de l'**application web** (projet `bad-web`) créés
+> par le compte connecté, ouvre le site dans le navigateur (bouton **🌐**) et affiche les **réponses**
+> du formulaire choisi. L'ancienne page « Formulaires » (`FormulairesView`, simple lien vers le site) a
+> été **supprimée** et fusionnée dedans.
+> La page **Google Forms** (`FormsView`, §10bis) est **mise en veille** : son entrée de menu `NavForms`
+> est `Visibility="Collapsed"` dans `MainWindow.xaml` et sa **synchro Drive au démarrage est retirée**
+> (`forms.json` sert désormais de registre local des formulaires WEB : libellé associé). Pour la
+> réactiver, retirer `Visibility="Collapsed"` — attention, sa synchro écrase `forms.json`.
 
 Chaque page peut implémenter `IActivableView.OnActivated()` (rafraîchissement à l'affichage).
 
@@ -141,12 +148,17 @@ quand l'appli est visible.
 
 Racine : `%LOCALAPPDATA%\BadmintonClub\`
 ```
-settings.json                            Paramètres globaux (navigateur, compte courant)
+settings.json                            Paramètres globaux (navigateur, compte courant,
+                                         adresse + clé d'API de l'application web des formulaires)
 log_error.txt                            Journal des plantages (diagnostic)
 google_token/                            Jetons OAuth (par « user »)
 accounts/<email>/adherents.json          Adhérents du compte
 accounts/<email>/worksheets.json         Registre des Sheets créés par le compte
-accounts/<email>/forms.json              Registre des Google Forms du compte (libellé, mapping, règles)
+accounts/<email>/forms.json              Registre local des formulaires WEB du compte : identifiant,
+                                         nom, dates + **libellé Contacts associé** (le mapping des
+                                         champs et les règles de réponses viennent désormais du site)
+accounts/<email>/form_states.json        Décisions locales par formulaire : inscriptions validées
+                                         (historique) et statuts forcés à la main
 accounts/<email>/activity.json           Historique des activités du compte
 modeles/                                 Modèles de Sheets (Excel/CSV)
 modeles_forms/                           Modèles de Google Forms (structure JSON réutilisable)
@@ -182,8 +194,8 @@ Le compte « par défaut » (avant connexion) conserve les fichiers à la racine
 ## 6. Page **Contacts**
 
 Tableau paginé : sélection, Nom, Prénom, **Téléphone** (formaté, rouge si invalide), **E-mail**
-(lien Gmail), **Mails secondaires** (bouton **✉ N** → message box listant les adresses, « N/A » si aucune),
-**Ajouté le** (`DateInscription`), Actions (✏ Modifier / 🏷 Libellés / 🗑 Supprimer).
+(lien Gmail), **Mails secondaires** (bouton **✉ N** → **fenêtre stylée** `EmailListWindow` listant les
+adresses, « N/A » si aucune), **Ajouté le** (`DateInscription`), Actions (✏ Modifier / 🏷 Libellés / 🗑 Supprimer).
 
 - **Pagination** : 20 / 50 / 100 par page ; tri par en-tête ; copie de cellule (Ctrl+C).
 - **Filtres (barre)** : recherche, **filtre par libellé** (multiselect + « (Sans libellé) »),
@@ -191,7 +203,12 @@ Tableau paginé : sélection, Nom, Prénom, **Téléphone** (formaté, rouge si 
 - **Recherche avancée** (panneau dépliable) :
   - **Filtre par période d'ajout** (Du / Au sur `DateInscription`, bornes incluses, ✕ pour effacer) ;
   - bascule **🔁 Doublons** : n'affiche que les **homonymes** (même nom + prénom présents ≥ 2 fois).
-- **Modifier** : formulaire → mise à jour + push Google immédiat (journalisé, ancien/nouveau).
+- **Ajouter / Modifier** (`AdherentEditWindow`) : formulaire **Nom** (en premier) · **Prénom** ·
+  **Téléphone** · **E-mail** · **Mails secondaires** — champ **par adresse** façon Google Contacts
+  (un champ, un bouton **＋ Ajouter une adresse** qui ajoute un champ, **✕** pour retirer). Le bouton
+  d'ajout est **désactivé tant qu'une adresse en cours est vide ou mal formée**. Adresses validées,
+  l'e-mail principal en est exclu, poussées vers Google comme adresses supplémentaires →
+  mise à jour + push Google immédiat (journalisé, ancien/nouveau).
 - **Libellés** : modale `ManageLabelsWindow` (cases) → applique l'ensemble voulu **en un seul appel**
   (`SetContactMembershipsAsync`, voir §13) + journalise associations/dissociations.
 - **Ajouter / Supprimer** : formulaire / confirmation stylée ; push Google immédiat ; journalisés.
@@ -282,43 +299,168 @@ synchronisé depuis Drive via `mimeType='application/vnd.google-apps.form'`). Fi
 
 ---
 
-## 11. Page **Préinscriptions** (réponses d'un formulaire)
+## 11. Page **Formulaires d'inscription** (réponses d'un formulaire)
 
-La page s'ouvre sur un **sélecteur de formulaire** : un tableau des formulaires (Nom · Libellé · Créé le ·
+> **Source des données : l'application web** (`bad-web`), via son API d'intégration en lecture seule
+> (`WebFormsService`, en-tête `x-api-key`). Les Google Forms ne sont plus utilisés. Réglages dans
+> **Paramètres** : *adresse du site* (vide = `https://bad-web-rho.vercel.app`) et *clé d'API*
+> (= `INTEGRATION_API_KEY` du site), stockés dans `settings.json` (jamais versionné).
+>
+> - Le **sélecteur** liste les formulaires **créés par le compte Google connecté** (filtre `owner`),
+>   avec **🔄 Actualiser** et **🌐 Ouvrir l'application web**.
+> - La **correspondance champ contact ↔ question** (`FieldMap`) et les **règles de liste d'attente**
+>   (`AnswerRules`) ne se configurent plus dans le desktop : elles sont **déduites du formulaire web**
+>   (champ de contact associé à la question, option marquée « Ajouter à la liste d'attente »).
+> - Le **libellé Contacts** du formulaire est désormais choisi **sur le site, à la création**
+>   (obligatoire, un seul) et lu ici : la colonne *Libellé* et ✔ Valider s'en servent. Le bouton local
+>   « 🏷 Libellé » a été retiré ; `forms.json` ne sert plus que de repli pour les formulaires créés
+>   avant cette évolution.
+> - Les **libellés** ne sont plus envoyés au site : celui-ci lit **lui-même** Google Contacts
+>   (People API, lecture seule) après une autorisation donnée par l'admin sur le site
+>   (« Connecter Google Contacts » puis « 🔄 Actualiser »). Rien à faire ici.
+> - Tout le reste (alertes, comparaison avec les contacts, ⏳ liste d'attente, ✔ validation,
+>   👁 Réponses avec surlignage des différences) est **inchangé** : seule la source a changé.
+
+La page s'ouvre sur un **sélecteur de formulaire** : un **filtre de recherche** (nom ou libellé, avec le
+compte « N sur M ») puis un tableau des formulaires (Nom · Libellé · Créé le ·
 bouton **👥 Voir les réponses** ; double-clic aussi). On y accède depuis le menu latéral, la page
 **Association** (📝) ou la page **Google Forms** (👥, qui ouvre directement les réponses).
 
 Le **visualiseur des réponses** d'un formulaire affiche en **titre le nom du formulaire** (avec un bouton
 **← Formulaires** pour revenir au sélecteur) et les répondants **comme des contacts** (mêmes colonnes) :
 **Rang · Nom · Prénom · Téléphone · E-mail · Mails secondaires · Répondu le · Modifié le · Statut**.
-Sous le titre : un **filtre de recherche** (comme la page Contacts) + boutons **⏳ Liste d'attente** et **✔ Valider**.
+Sous le titre : un **filtre de recherche** (comme la page Contacts) + boutons **✅ Inscrits**,
+**⬇ Exporter CSV** et **⏳ Liste d'attente**. Les actions sur les personnes sont dans la **barre de
+sélection**, qui n'apparaît qu'une fois des lignes cochées (voir plus bas).
+
+> **Décisions locales** (fichier `form_states.json` du compte, par identifiant de formulaire) :
+> inscriptions **validées** et **statuts forcés** à la main — rien de cela n'est envoyé au site.
+> Le desktop n'écrit sur le site que dans **deux** cas : la **correction d'une réponse**
+> (bouton « ignorer ») et la **suppression d'une préinscription** (🗑).
 
 - **Statut** : **En préinscription** (ni en attente, ni annulée), **En attente** (règle liste d'attente) ou
   **Annulée** (règle annulation).
 - **Vue par défaut** : uniquement les **préinscrits** (**En préinscription**). Les personnes **En attente**
   n'apparaissent **que** dans **⏳ Liste d'attente** ; la colonne **Rang** n'est visible que dans ce mode.
 - **Sélection** : case **« Tout sélectionner »** dans l'**en-tête** du tableau (comme les autres pages).
-- **Colonne Alerte** : bouton **⚠** (→ message box listant **toutes** les alertes du répondant) ou **« N/A »**
-  s'il n'y en a aucune. Alertes possibles : **absent de mes contacts**, **déjà associé au libellé**,
-  **infos différentes** du contact (champs listés), **e-mail au format invalide**.
+- **Colonne Alerte** : bouton **⚠** → **fenêtre d'alerte stylée** (`AlertWindow`) listant **toutes** les
+  alertes du répondant, avec un bouton **👁 Voir les changements** qui ouvre le **détail de la réponse**
+  (§ 👁 Réponses) ; **« N/A »** s'il n'y a aucune alerte. Alertes possibles : **absent de mes contacts**, **déjà associé au libellé**,
+  **associé au libellé mais absent de mes contacts** (incohérence), **infos différentes** du contact
+  (champs listés), **e-mail au format invalide**.
+- **Incohérence « associé au libellé mais pas dans mes contacts »** : quand un répondant est **membre
+  du libellé** du formulaire (côté Google) mais **absent de mes contacts** locaux, la ligne est
+  surlignée en **jaune** (au lieu du rouge « pas dans mes contacts ») et une **alerte dédiée** le
+  signale : il faut l'**ajouter** (➕, qui relie au contact Google existant) ou **resynchroniser**,
+  plutôt que le traiter comme un inconnu.
+- **Contenu des colonnes** : ce sont les **informations du contact** rapproché qui sont affichées (la page
+  se lit donc comme la page Contacts). Si le répondant **n'est pas** dans mes contacts, on affiche les
+  **valeurs de sa réponse** (quand les questions sont associées à des champs de contact) ; sinon seulement
+  son **e-mail**, avec la mention **« (pas dans mes contacts) »** sous la colonne Nom.
 - **Ligne rouge + bouton ➕ Contacts** : répondant **absent de mes contacts** → bouton pour l'ajouter
   directement aux contacts (crée le contact, push Google, journalisé).
-- **Ligne jaune** : répondant présent dans mes contacts mais dont une **info diffère** (nom, prénom ou téléphone).
+- **Ligne jaune** : répondant présent dans mes contacts mais dont une **info diffère** (nom, prénom,
+  téléphone ou e-mail). Les **cellules concernées** sont surlignées en **jaune plus soutenu**, avec
+  info-bulle **« Réponse : … »** donnant la valeur saisie dans le formulaire.
+- **Rafraîchissement immédiat** : ajout aux contacts (➕), mise à jour depuis 👁 Réponses et ✔ Valider
+  reconstruisent le rapprochement et **rafraîchissent la page** (couleurs, colonnes et alertes) sans recharger.
 - **E-mail en rouge** : format d'e-mail invalide (les fautes rattrapables — virgule→point, espaces — sont
   **corrigées automatiquement**).
 - **Regroupement** : les soumissions multiples d'une même personne (même e-mail, insensible à la casse) sont
   **fusionnées en une ligne** (la plus récente fait foi).
-- **Mails secondaires** : bouton **✉ N** (→ message box) = union du contact existant et de la réponse
-  (si la colonne « Mails secondaires » est mappée) ; « N/A » sinon. Repris à la validation.
+- **Mails secondaires** : bouton **✉ N** (→ fenêtre stylée `EmailListWindow`) = **ceux de la réponse
+  s'il y en a** (colonne « Mails secondaires » mappée), **sinon ceux du contact** ; « N/A » si aucun.
+  À la validation (ou mise à jour), les mails secondaires de la réponse **remplacent** ceux du contact
+  (ils ne sont plus fusionnés) ; si la réponse n'en fournit aucun, ceux du contact sont conservés.
 - **Modifié le** : date de **dernière modification** du formulaire par le répondant (`LastSubmittedTime`
   postérieure à la 1re soumission) ; « N/A » s'il n'a pas modifié sa réponse.
-- **👁 Réponses** → détail avec **surlignage jaune** des réponses qui **diffèrent** du contact (affiche la
-  valeur actuelle) + bouton **💾 Mettre à jour le contact** pour appliquer les nouvelles infos.
+- **👁 Réponses** → détail des champs qui **diffèrent** du contact, avec un **code couleur** : la
+  **réponse du formulaire** dans un encadré **bleu** et le **contact actuel** dans un encadré **ambre**.
+  Les boutons sont assortis : **✎ Mettre à jour ce champ** (bleu = applique la réponse) et **✖ Ignorer**
+  (ambre = garde l'état actuel) ; en bas, **💾 Mettre à jour le contact** (bleu, tout appliquer) et
+  **✖ Garder l'état actuel** (ambre, tout ignorer).
+- **Ignorer une différence** : le contact **n'est pas modifié** ; c'est **la réponse de la personne qui
+  est corrigée sur le site** avec la valeur actuelle du contact
+  (`PATCH /api/integration/forms/…/responses/…`), puis les réponses sont relues. Si le champ n'a pas de
+  question associée sur le site, un avertissement le signale et rien n'est écrit.
+  Dans la modale, la ligne ignorée bascule **aussitôt** sur la valeur conservée (celle du contact), au
+  lieu de garder l'ancienne réponse affichée : c'est bien cette valeur qui remplacera la réponse. À
+  l'inverse, **✎ Mettre à jour ce champ** copie la valeur de la réponse dans le contact (via Google).
+- **⏳ / ↩ par ligne** : forcer le statut d'une personne — la mettre **en liste d'attente** ou la
+  **remettre en préinscription**. Un statut forcé est suivi d'un **astérisque** (`En attente *`) et prime
+  sur les règles du formulaire ; il est oublié à la validation.
+- **🗑 par ligne** : supprime la **préinscription sur le site** (après confirmation). La personne peut
+  de nouveau remplir le formulaire ; son contact et son éventuel adhérent ne sont **pas** touchés.
+- **Barre de sélection** : dès qu'une case est cochée, une barre verte apparaît sous le filtre avec le
+  nombre de sélectionnés et les actions **du mode courant** —
+  *préinscrits* : **✔ Valider**, **⏳ Mettre en liste d'attente**, **🗑 Supprimer** ;
+  *liste d'attente* : **↩ Remettre en préinscription**, **🗑 Supprimer** (pas de validation directe
+  depuis la liste d'attente : il faut d'abord repasser la personne en préinscription).
+- **✔ Valider** : les personnes validées **disparaissent** de la liste des réponses et rejoignent
+  **✅ Inscrits**, d'où **↩ Remettre en préinscription** les fait réapparaître dans les réponses
+  (l'adhérent créé, lui, reste, mais la personne est **dissociée du libellé** — voir ✅ Inscrits).
+  La validation **enregistre le libellé associé** (nom + ressource Google) sur l'inscription, ce qui
+  permet ensuite de la dissocier du bon libellé. En cas d'erreur Google sur une personne, elle
+  **reste** dans la liste.
+- **Changement de libellé du formulaire** : si le libellé du formulaire est modifié **sur le site**
+  après des validations, l'ouverture des réponses **réaligne les inscrits** : chaque personne déjà
+  inscrite est **dissociée de l'ancien libellé** et **associée au nouveau** (Google Contacts), le
+  libellé enregistré sur l'inscription est mis à jour, et un message récapitule le nombre de personnes
+  déplacées. Sans effet si le libellé n'a pas changé (aucune écriture Google) ; une personne absente
+  de mes contacts est ignorée (retentée au prochain chargement).
+- **Retour automatique dans la liste** : une personne **dissociée** du libellé peut de nouveau remplir
+  le formulaire (le site le voit en moins d'une minute). Si sa **nouvelle réponse est postérieure à sa
+  validation**, elle **ressort des inscrits** et **réapparaît** dans les réponses (en préinscription
+  ou en attente selon ses réponses) — c'est une nouvelle inscription.
+- **✅ Inscrits (personnes inscrites)** : **page inline** (comme ⏳ Liste d'attente, pas une fenêtre)
+  ouverte par le bouton **✅ Inscrits**. Son **titre reprend le nom du formulaire** (« Personnes
+  inscrites — <formulaire> ») ; en-tête : **← Formulaires**, un **filtre de recherche** et une barre
+  d'outils pour **naviguer** — **👥 Préinscrits**, **⏳ Liste d'attente** et **⬇ Exporter CSV** (des
+  inscrits affichés, `CsvRegisteredExporter`). Elle affiche les personnes déjà validées **comme la page
+  Contacts** (le contact tel quel : Nom · Prénom · Téléphone · E-mail · Mails secondaires · Ajouté le)
+  et un bouton **↩ Remettre en préinscription** par ligne : la personne redevient une réponse à traiter
+  **et est dissociée du
+  libellé** auquel elle avait été associée (l'adhérent reste ; si la dissociation Google échoue, la
+  remise en préinscription est annulée). Le retour aux réponses recharge la liste. Les colonnes
+  montrent le **contact d'aujourd'hui**, pas
+  l'instantané de la validation : modifier le contact met la page à jour. Si le contact a été supprimé
+  depuis, la mention *« (plus dans mes contacts) »* apparaît et les valeurs figées à la validation
+  sont affichées.
+  > **Lien réponse/inscrit ↔ contact stable** : le rapprochement ne dépend plus du seul e-mail courant
+  > du contact. Deux mécanismes complémentaires :
+  > - **Inscrits** : l'inscription mémorise l'**identifiant du contact** (`Adherent.Id`) à la validation ;
+  >   le contact est retrouvé par cet identifiant.
+  > - **Réponses (préinscrits / attente) et anciens inscrits** : dès qu'une personne est rapprochée
+  >   **par e-mail vérifié**, on enregistre un **lien durable** `e-mail vérifié → identifiant du contact`
+  >   (`FormState.ContactLinks`). Aux chargements suivants, le contact est retrouvé **par cet identifiant**,
+  >   donc **modifier l'e-mail du contact ne casse plus le lien** (plus de « pas dans mes contacts » avec
+  >   l'ancien e-mail).
+  >
+  > L'e-mail stocké côté réponse/inscription reste, lui, l'**identité de la réponse** (e-mail vérifié)
+  > et n'est **pas** réécrit — c'est lui qui masque l'inscrit et porte les statuts forcés *préinscription
+  > / attente*. À la **validation**, un contact déjà rapproché n'est **pas dupliqué** et son e-mail
+  > (modifié à la main) n'est **pas écrasé** ; seul un **nouveau** contact reçoit l'e-mail vérifié.
+  > *Limite* : une personne dont l'e-mail a été modifié **avant** qu'un lien ait pu être mémorisé
+  > (aucun rapprochement par e-mail n'a eu lieu) ne peut pas être retrouvée automatiquement — il faut la
+  > rapprocher une fois (afficher le formulaire pendant que l'e-mail correspond encore, ou la ré-ajouter).
+- **⬇ Exporter CSV** : exporte **les lignes affichées** (recherche et mode ⏳ compris ; colonne *Rang* en
+  liste d'attente), avec les colonnes du tableau + *Dans mes contacts* et *Infos différentes*
+  (`CsvResponseExporter`, séparateur `;`, UTF-8 BOM, dialogue ouvert sur **Téléchargements**).
 
 ### 11.1 Lecture des réponses
+
+> **Fuseau horaire** : le site renvoie ses dates en **UTC** (`…Z`). `WebFormsService` les ramène à
+> l'**heure locale** à la lecture. Sans cette conversion, « Répondu le » / « Modifié le » sont
+> décalés et surtout les comparaisons avec les dates locales de l'application (ex. la date de
+> validation) sont fausses — une nouvelle réponse ne faisait alors pas réapparaître la personne.
+
 - `GoogleFormsService.GetFormQuestionsAsync` (id + intitulé) puis `ListResponsesAsync` (réponses + e-mail
   vérifié). Les répondants sont **regroupés par e-mail vérifié** (identité « qui a répondu », et **non**
   l'e-mail saisi) ; la **dernière soumission** fait foi, la **1re** donne la place dans la file d'attente.
+- Le **mapping** vient du site : `WebFormsService` traduit le `contactField` de chaque question
+  (`FIRST_NAME`/`LAST_NAME`/`PHONE`/`EMAIL`/`SECONDARY_EMAIL`) en clés `FieldMap` **`prenom` / `nom` /
+  `tel` / `email` / `secondaryEmails`**. Ces clés doivent rester **exactement** celles-là : toute autre
+  graphie fait que plus aucune valeur de réponse n'est lue (colonnes vides, aucune différence détectée).
 - Champs **Prénom/Nom/Téléphone/Mails secondaires** extraits via le **mapping** manuel du formulaire
   (`FormRecord.FieldMap`) ; **repli sur l'auto-détection** (`DetectContactField`) uniquement si **aucune**
   correspondance n'a été configurée. L'**E-mail** affiché est l'e-mail vérifié du répondant.
@@ -333,6 +475,12 @@ Sous le titre : un **filtre de recherche** (comme la page Contacts) + boutons **
 - **✔ Valider (N)** (sélection multiple) : upsert des adhérents **par e-mail**, contact Google créé/mis à
   jour, **association au libellé du formulaire**, journalisation. Les réponses **annulées** sont exclues ;
   nécessite un **libellé associé** (page Google Forms → ⚙ Configuration).
+  Un champ **non renseigné** dans la réponse **n'écrase pas** la valeur actuelle du contact (nom, prénom,
+  téléphone) : on garde l'état actuel (idem détection des différences et ✎ mise à jour d'un champ).
+  **Choix groupé** : si des personnes sélectionnées ont des **infos différentes** de leur contact, une
+  fenêtre (`ValidateChangesWindow`) propose, **pour toutes**, **💾 Mettre à jour** les contacts avec les
+  réponses ou **✖ Garder l'état actuel** (ou Annuler) ; « garder » valide sans modifier les contacts
+  existants. Sans aucune différence, c'est la confirmation simple habituelle.
 - **Lecture seule** côté Google : aucune écriture dans le formulaire ni ses réponses.
 
 ---
@@ -352,6 +500,28 @@ message de bilan (§6).
 mises à jour, rapprochement par e-mail, ajouts). **App → Google** immédiat pour ajout/modif/suppression ;
 **Google → App** au lancement.
 
+**E-mails (principal + secondaires).** `ListContactsAsync` lit **tous** les e-mails d'un contact : le
+**1er** est le principal, les **suivants** les secondaires. La réconciliation (`ApplyGoogleToLocal`)
+aligne aussi les **e-mails secondaires** sur Google (comparaison d'ensemble) : **supprimer un e-mail
+secondaire côté Google le retire donc en local** au prochain sync. Côté écriture, `BuildEmails` pousse
+principal puis secondaires.
+
+**Dédoublonnage local (au début de la synchro).** Plusieurs adhérents locaux ont pu, au fil des
+ajouts/validations, pointer sur le **même contact Google** (même `GoogleResourceName`) — ce qui gonflait
+le total local par rapport à Google. La synchro **n'en garde qu'un par ressource** (fusion des e-mails
+secondaires, retrait des doublons) avant la réconciliation. Les contacts **liés à une ressource Google
+absente en ligne** (contact supprimé côté Google) restent, eux, retirés par la réconciliation.
+
+**Lecture autoritaire & bilan.** Après une **lecture Google réussie** (People API paginée), la liste
+locale reflète **exactement** les contacts renvoyés par l'API (un adhérent par ressource) :
+`SyncContactsAsync` renvoie un **`SyncReport`** (compte Google, compte local, ajoutés/retirés/poussés/
+fusionnés). La synchro **de démarrage** reste silencieuse (tolérance hors ligne) ; le bouton
+**🔄 Resynchroniser** (page Contacts) force une réconciliation complète, **affiche le bilan** et
+**remonte les erreurs**. Si la lecture échoue, la liste locale n'est **pas** laissée à moitié
+réconciliée. À noter : le compte de l'**API People** peut différer du nombre affiché dans l'**interface
+web** Google Contacts (contacts sans nom, « Autres contacts », éléments en corbeille non purgés…) — le
+bilan montre le compte **vu par l'appli** pour lever l'ambiguïté.
+
 **Appartenances (libellés) — appel atomique.** Pour fixer les libellés d'un contact,
 `GoogleContactsService.SetContactMembershipsAsync` remplace **toute** la liste d'appartenances en **un seul**
 `updateContact` (au lieu de plusieurs `members.modify` successifs, qui pouvaient perdre une modification —
@@ -370,6 +540,8 @@ Journal local **par compte** (`activity.json`, 3000 entrées max, le plus récen
   la validation d'une préinscription.
 - **Trois tableaux** choisis par **radios** : **Utilisateurs**, **Libellés**, **Sheets**.
 - **Filtres** : par **action** (combo), par **période** (Du / Au), et par **cible** (champ texte).
+- **Pagination** : le résultat filtré est **paginé à 1000 lignes par page** (◀ Précédent / Suivant ▶ +
+  « Page X / Y ») ; le compteur affiche le **total** filtré. Le changement de filtre revient page 1.
 - Colonnes : **Date · Action** (colorée via `ActionBrush`) **· Cible · Détails · Ancienne · Nouvelle valeur**.
 - **Détails contact** : bouton **👁** dans la colonne Cible (entrées Utilisateur) → fenêtre stylée
   `ContactDetailsWindow` affichant **Nom / Prénom / Téléphone / E-mail**. Ces infos sont un **instantané
@@ -385,9 +557,43 @@ Journal local **par compte** (`activity.json`, 3000 entrées max, le plus récen
   l'événement de sélection (pas de récursion lors des adaptations de listes).
 - **Confirmations** : `ConfirmWindow` stylée pour suppressions/dissociations.
 - **Tableaux** : sélection/copie par cellule (Ctrl+C), désélection au clic hors tableau, virtualisation, tri.
-- **Navigateur** : seul paramètre de la page **Paramètres**.
+  **Fenêtre réduite** : les colonnes ne s'écrasent plus. Les tableaux principaux (Contacts,
+  Préinscriptions, Historique) ont des colonnes à **largeur fixe** et **une seule colonne extensible**
+  (l'e-mail, ou « Nouvelle valeur » pour l'historique) qui absorbe l'espace quand la fenêtre est large.
+  Quand elle rétrécit, un **défilement horizontal** standard apparaît (barre en bas,
+  `HorizontalScrollBarVisibility=Auto`) — pas de recalcul « étoilé » instable au redimensionnement.
+  Le **défilement tactile** (panning horizontal + vertical) est activé sur le ScrollViewer interne
+  (`DataGrid_Loaded` dans `App.xaml.cs`, `PanningMode=Both`).
+- **Page Paramètres** : navigateur d'ouverture des liens, **adresse de l'application web** des
+  formulaires d'inscription (vide = valeur par défaut) et **clé d'API d'intégration** (champ masqué,
+  = `INTEGRATION_API_KEY` du site). Enregistrés dans `settings.json`, jamais versionnés.
 - **Mise à jour** : comparaison avec la dernière Release GitHub à la connexion.
 - **Journal d'erreurs** : plantages non gérés → `log_error.txt` (via `ErrorLogger`).
+
+---
+
+## 15bis. Liaison avec l'application web (dépannage)
+
+`WebFormsService` traduit chaque situation en message lisible dans la page :
+
+| Symptôme | Cause | Correction |
+|---|---|---|
+| « Liaison … non configurée » | clé d'API vide | Paramètres → coller la clé du site |
+| « Clé d'API refusée » (401) | clé différente de `INTEGRATION_API_KEY` | recopier la valeur exacte |
+| « Le site ne propose pas encore l'API » (3xx) | site déployé sans les routes d'intégration | redéployer l'application web |
+| « Cette fonction n'existe pas sur le site » (404 + page HTML) | route absente de la **version déployée** (site en retard sur le code local) | redéployer, ou pointer Paramètres sur `http://localhost:3000` |
+| « Cette action n'existe pas encore sur le site » (405) | la route existe mais pas cette méthode (ex. `DELETE` d'une réponse) : même cause, version déployée antérieure | idem |
+
+Les erreurs de liaison (`WebFormsException`) sont traitées comme les erreurs Google par
+`ProgressRunner` : leur message s'affiche **dans la page ou la boîte de dialogue** concernée, jamais
+en « erreur inattendue ».
+| « Introuvable : formulaire ou réponse supprimé(e) » (404 + JSON) | la donnée n'existe plus côté site | actualiser la liste |
+| « pas de clé d'intégration configurée » (503) | `INTEGRATION_API_KEY` absente côté site | l'ajouter aux variables Vercel puis redéployer |
+| « Application web injoignable » | réseau / site arrêté | vérifier la connexion et l'adresse |
+| Liste vide sans erreur | aucun formulaire **créé par le compte connecté** | se connecter avec le compte propriétaire, ou en créer un sur le site |
+
+Le client **ne suit pas les redirections** : une redirection vers la page de connexion signifie que
+l'API n'est pas déployée, et non que la clé est mauvaise.
 
 ---
 

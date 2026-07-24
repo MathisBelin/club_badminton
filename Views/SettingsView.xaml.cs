@@ -17,7 +17,12 @@ public partial class SettingsView : UserControl, IActivableView
 
     public void OnActivated() => Load();
 
-    private void Load() => LoadBrowsers();
+    private void Load()
+    {
+        LoadBrowsers();
+        WebUrlBox.Text = _services.Settings.WebFormsUrl;
+        WebKeyBox.Password = _services.Settings.WebFormsApiKey;
+    }
 
     private void LoadBrowsers()
     {
@@ -38,6 +43,11 @@ public partial class SettingsView : UserControl, IActivableView
     private void Enregistrer_Click(object sender, RoutedEventArgs e)
     {
         _services.UpdateBrowser((BrowserCombo.SelectedItem as BrowserInfo)?.ExecutablePath ?? string.Empty);
+
+        // Liaison avec l'application web des formulaires d'inscription.
+        _services.Settings.WebFormsUrl = WebUrlBox.Text.Trim();
+        _services.Settings.WebFormsApiKey = WebKeyBox.Password.Trim();
+        _services.SettingsService.Save(_services.Settings);
         MessageBox.Show(Window.GetWindow(this), "Paramètres enregistrés.", "Paramètres",
             MessageBoxButton.OK, MessageBoxImage.Information);
     }
